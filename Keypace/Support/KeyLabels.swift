@@ -1,13 +1,17 @@
-/// Labels for key caps: from the given layout, else the active one, else the US layout.
+import KeypaceCore
+
+/// Labels for key caps. A specific layout uses the labels saved when it was in use, then the installed
+/// layout; otherwise the active layout labels keys. The US layout is the last resort.
 /// Statistics combined across layouts are labeled with the active layout.
 enum KeyLabels {
-    static func label(_ keyCode: UInt16, using sources: InputSources?, layout: String? = nil) -> String {
-        if let label = sources?.label(for: keyCode, inputSourceID: layout), !label.isEmpty { return label }
+    static func label(_ keyCode: UInt16, using sources: InputSources?, layout: InputSourceRecord? = nil) -> String {
+        if let saved = layout?.labels?[keyCode], !saved.isEmpty, keyCode != 49 { return saved }
+        if let label = sources?.label(for: keyCode, inputSourceID: layout?.id), !label.isEmpty { return label }
         return us[keyCode] ?? "?"
     }
 
     /// A key pair as it reads in text: "T → H", with Space shown as ␣.
-    static func pair(_ pair: (from: UInt16, to: UInt16), using sources: InputSources?, layout: String? = nil) -> String {
+    static func pair(_ pair: (from: UInt16, to: UInt16), using sources: InputSources?, layout: InputSourceRecord? = nil) -> String {
         func short(_ code: UInt16) -> String { code == 49 ? "␣" : label(code, using: sources, layout: layout) }
         return "\(short(pair.from)) → \(short(pair.to))"
     }

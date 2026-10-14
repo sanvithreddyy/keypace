@@ -78,4 +78,13 @@ struct StatStoreTests {
         #expect(try store.syntheticCount(in: DateInterval(start: monday, end: monday.addingTimeInterval(9 * 3600 + 60))) == 20)
         #expect(try store.syntheticCount(in: DateInterval(start: monday, end: monday.addingTimeInterval(9 * 3600))) == 0)
     }
+
+    @Test func `layout labels are kept and not erased by a later sighting without them`() throws {
+        let store = try SessionStore.inMemory()
+        try store.noteInputSource(InputSourceRecord(id: "com.apple.keylayout.Dvorak", name: "Dvorak", lastSeen: monday, labels: [1: "O", 12: "'"]))
+        try store.noteInputSource(InputSourceRecord(id: "com.apple.keylayout.Dvorak", name: "Dvorak", lastSeen: monday.addingTimeInterval(60)))
+        let source = try #require(try store.inputSources().first)
+        #expect(source.labels == [1: "O", 12: "'"])
+        #expect(source.lastSeen == monday.addingTimeInterval(60))
+    }
 }

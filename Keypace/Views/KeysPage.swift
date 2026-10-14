@@ -14,6 +14,7 @@ struct KeysPage: View {
         let filter = StatFilter(keyboardID: keyboardID, inputSourceID: inputSourceID)
         let keys = interval.map { tracker.keyStats(in: $0, filter: filter) } ?? [:]
         let pairs = interval.map { tracker.pairStats(in: $0, filter: filter) } ?? [:]
+        let layout = inputSourceID.flatMap { id in tracker.inputSourceRecords().first { $0.id == id } }
 
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -35,12 +36,12 @@ struct KeysPage: View {
                     }
                     .padding(.top, 24)
                     .padding(.bottom, 10)
-                    KeyboardHeatmap(keys: keys, mode: mode) { KeyLabels.label($0, using: tracker.inputSources, layout: inputSourceID) }
+                    KeyboardHeatmap(keys: keys, mode: mode) { KeyLabels.label($0, using: tracker.inputSources, layout: layout) }
 
                     HStack(alignment: .top, spacing: 32) {
-                        CorrectedKeys(keys: keys, sources: tracker.inputSources, layout: inputSourceID)
-                        PairList(title: "Slowest pairs", pairs: pairs, slowest: true, sources: tracker.inputSources, layout: inputSourceID)
-                        PairList(title: "Fastest pairs", pairs: pairs, slowest: false, sources: tracker.inputSources, layout: inputSourceID)
+                        CorrectedKeys(keys: keys, sources: tracker.inputSources, layout: layout)
+                        PairList(title: "Slowest pairs", pairs: pairs, slowest: true, sources: tracker.inputSources, layout: layout)
+                        PairList(title: "Fastest pairs", pairs: pairs, slowest: false, sources: tracker.inputSources, layout: layout)
                     }
 
                     SectionHeading(title: "Fingers", detail: "Assumes touch-typing finger assignments")
@@ -154,7 +155,7 @@ struct KeyboardHeatmap: View {
 private struct CorrectedKeys: View {
     let keys: [UInt16: KeyCount]
     let sources: InputSources?
-    let layout: String?
+    let layout: InputSourceRecord?
 
     var body: some View {
         let ranked = keys.filter { $0.value.presses >= KeyboardHeatmap.minimumPresses && $0.value.corrections > 0 && $0.key != 51 && $0.key != 49 }
@@ -187,7 +188,7 @@ private struct PairList: View {
     let pairs: [KeyPair: PairTiming]
     let slowest: Bool
     let sources: InputSources?
-    let layout: String?
+    let layout: InputSourceRecord?
 
     /// Times a pair must occur before its average counts.
     static let minimumCount = 5

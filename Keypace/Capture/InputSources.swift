@@ -36,7 +36,13 @@ final class InputSources {
             current = nil
             return
         }
-        current = InputSourceRecord(id: id, name: Self.string(source, kTISPropertyLocalizedName) ?? id, lastSeen: .now)
+        let layout = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue()
+        let labels = layout.map { layout in
+            Dictionary(uniqueKeysWithValues: KeyboardGeometry.keys.compactMap { key in
+                Self.translate(key.keyCode, with: layout).map { (key.keyCode, $0.uppercased()) }
+            })
+        }
+        current = InputSourceRecord(id: id, name: Self.string(source, kTISPropertyLocalizedName) ?? id, lastSeen: .now, labels: labels)
     }
 
     private static func string(_ source: TISInputSource, _ key: CFString) -> String? {

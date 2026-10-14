@@ -152,6 +152,9 @@ public struct SessionStore: Sendable {
                 t.primaryKey(["hour", "appID"])
             }
         }
+        migrator.registerMigration("v4-layout-labels") { db in
+            try db.alter(table: "inputSource") { t in t.add(column: "labels", .text) }
+        }
         return migrator
     }
 
@@ -250,12 +253,14 @@ public struct SessionStore: Sendable {
         try db.read { db in try KeyboardRecord.order(Column("lastSeen").desc).fetchAll(db) }
     }
 
+    /// Records a layout as seen; its key labels are kept so its statistics stay labeled after it's removed.
     public func noteInputSource(_ source: InputSourceRecord) throws {
+        let labels = try source.labels.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
         try db.write { db in
             try db.execute(sql: """
-                INSERT INTO inputSource (id, name, lastSeen) VALUES (?, ?, ?)
-                ON CONFLICT DO UPDATE SET name = excluded.name, lastSeen = excluded.lastSeen
-                """, arguments: [source.id, source.name, source.lastSeen])
+                INSERT INTO inputSource (id, name, lastSeen, labels) VALUES (?, ?, ?, ?)
+                ON CONFLICT DO UPDATE SET name = excluded.name, lastSeen = excluded.lastSeen, labels = COALESCE(excluded.labels, labels)
+                """, arguments: [source.id, source.name, source.lastSeen, labels])
         }
     }
 
@@ -362,10 +367,13 @@ public struct InputSourceRecord: Codable, Sendable, Equatable, FetchableRecord, 
     public var id: String
     public var name: String
     public var lastSeen: Date
+    /// What each key types under this layout, captured while it was active.
+    public var labels: [UInt16: String]?
 
-    public init(id: String, name: String, lastSeen: Date) {
+    public init(id: String, name: String, lastSeen: Date, labels: [UInt16: String]? = nil) {
         self.id = id
         self.name = name
         self.lastSeen = lastSeen
+        self.labels = labels
     }
 }
