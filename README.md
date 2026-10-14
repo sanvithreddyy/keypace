@@ -73,8 +73,9 @@ keyboards or layouts. Sessions under 10 characters are discarded. Both limits
 are adjustable in Settings. Combined figures weight each session by its typing
 time.
 
-Deletions only count when they remove characters typed in the same session;
-deleting text that was already there is editing. Option-Delete and
+Deletions only count when they remove characters typed in the same session
+and still right before the cursor; deleting text that was already there, or
+after a click, arrow key or shortcut moved the cursor, is editing. Option-Delete and
 Command-Delete count every character they remove. Corrections include
 deliberate rewrites, so the app calls them corrections rather than accuracy.
 Each deletion is charged to the key whose character it removed. Key-pair
