@@ -9,8 +9,8 @@
 - Keyboard attribution through IOHID and layout attribution through input
   sources
 - Filter for keystrokes posted by other software, with a strength setting
-- Local history (GRDB): sessions plus daily key, pair, device and filtered-input
-  statistics
+- Local history (GRDB): sessions with their key and pair statistics, keyboards,
+  layouts with their key labels, and hourly filtered-input counts
 - Menu-bar number with format options, dropdown with weak spots, Live Metrics
   window, open at login
 - Main window: Overview, Statistics, Apps, Keys, Records, Keyboards, Layouts,

@@ -74,9 +74,9 @@ typed less than two seconds apart. Finger statistics assume touch-typing
 finger assignments. Shortcuts and navigation keys count as keystrokes but not
 per key, so a key's correction rate is over the characters it typed.
 
-Key and key-pair statistics are grouped by the local day they were typed on.
-After a time-zone change, days near midnight can differ slightly from session
-totals, which are regrouped in the current time zone.
+Keyboards are told apart by model and, when the keyboard reports one, a unique
+device ID or serial number. Two keyboards of the same model that report neither
+share one history.
 
 Keystrokes from a physical keyboard arrive from the HID system with no posting
 process; anything else (text expanders, automation, scripted typing) is counted
@@ -88,8 +88,9 @@ keystrokes, so they never count toward speed.
 Keypace listens to key events without blocking or changing them. It classifies
 each press as a character, a deletion or another key, then discards the
 character. The database (`~/Library/Application Support/Keypace/typing.sqlite`)
-holds session times, app, keyboard and layout identifiers, and daily per-key
-and key-pair counts. Nothing leaves the Mac.
+holds session times, app, keyboard and layout identifiers, per-session key and
+key-pair counts, hourly counts of filtered input, and each layout's key labels.
+Nothing leaves the Mac.
 
 ## Layout
 
