@@ -26,6 +26,21 @@ struct SessionStoreTests {
         #expect(fetched.totals == live.totals)
     }
 
+    @Test func `typing time and deletions are stored, and older sessions fall back`() throws {
+        let store = try SessionStore.inMemory()
+        var live = TypingSession(context: TypingContext(appID: "com.apple.Notes"), start: 100, end: 112, characters: 50, backspaces: 9, keystrokes: 59)
+        live.deletions = 5
+        live.activeDuration = 7.5
+        try store.insert(SessionRecord(live, endingAt: monday))
+        try store.insert(record(at: monday, seconds: 60, characters: 300, backspaces: 10))
+
+        let sessions = try store.allSessions()
+        #expect(sessions[0].totals.duration == 7.5)
+        #expect(sessions[0].totals.netCharacters == 45)
+        #expect(sessions[1].totals.duration == 60)
+        #expect(sessions[1].totals.netCharacters == 290)
+    }
+
     @Test func `range queries include the start and exclude the end`() throws {
         let store = try SessionStore.inMemory()
         let day = DateInterval(start: monday, duration: 86_400)

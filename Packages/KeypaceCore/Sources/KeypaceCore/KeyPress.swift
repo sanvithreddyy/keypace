@@ -3,7 +3,12 @@ public struct KeyPress: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
         /// Produced text: letters, digits, punctuation, Space, Return, Tab.
         case character
+        /// Delete, removing one character.
         case backspace
+        /// Option-Delete, removing the word before the cursor.
+        case deleteWord
+        /// Command-Delete, removing the line before the cursor.
+        case deleteLine
         /// Navigation, function keys, shortcuts and dead keys.
         case other
     }
@@ -26,10 +31,18 @@ public struct KeyPress: Sendable, Equatable {
 public enum KeyClassifier {
     public static let backspaceKeyCode: UInt16 = 51
 
-    /// - Parameter text: what the key produced under the active layout; empty for dead keys.
-    public static func kind(keyCode: UInt16, commandOrControl: Bool, text: String) -> KeyPress.Kind {
+    /// - Parameters:
+    ///   - commandOrControl: Command or Control is held; shortcuts aren't typing.
+    ///   - command: Command specifically, which turns Delete into a line delete.
+    ///   - option: Option, which turns Delete into a word delete.
+    ///   - text: what the key produced under the active layout; empty for dead keys.
+    public static func kind(keyCode: UInt16, commandOrControl: Bool, command: Bool = false, option: Bool = false, text: String) -> KeyPress.Kind {
+        if keyCode == backspaceKeyCode {
+            if command { return .deleteLine }
+            if commandOrControl { return .other }
+            return option ? .deleteWord : .backspace
+        }
         if commandOrControl { return .other }
-        if keyCode == backspaceKeyCode { return .backspace }
         guard !text.isEmpty else { return .other }
         for scalar in text.unicodeScalars {
             switch scalar.value {

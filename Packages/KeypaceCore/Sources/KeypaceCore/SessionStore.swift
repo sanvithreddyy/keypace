@@ -14,11 +14,16 @@ public struct SessionRecord: Codable, Sendable, Equatable, FetchableRecord, Muta
     public var characters: Int
     public var backspaces: Int
     public var keystrokes: Int
+    /// Characters typed in the session and deleted again; nil for sessions saved before it was tracked.
+    public var deletions: Int?
+    /// Seconds of typing with pauses left out; nil for sessions saved before it was tracked.
+    public var activeSeconds: Double?
 
     public init(
         id: Int64? = nil, start: Date, end: Date, appID: String,
         keyboardID: String? = nil, inputSourceID: String? = nil,
-        characters: Int, backspaces: Int, keystrokes: Int
+        characters: Int, backspaces: Int, keystrokes: Int,
+        deletions: Int? = nil, activeSeconds: Double? = nil
     ) {
         self.id = id
         self.start = start
@@ -29,6 +34,8 @@ public struct SessionRecord: Codable, Sendable, Equatable, FetchableRecord, Muta
         self.characters = characters
         self.backspaces = backspaces
         self.keystrokes = keystrokes
+        self.deletions = deletions
+        self.activeSeconds = activeSeconds
     }
 
     /// - Parameter end: wall-clock time of the session's last press.
@@ -37,12 +44,15 @@ public struct SessionRecord: Codable, Sendable, Equatable, FetchableRecord, Muta
             start: end.addingTimeInterval(-session.duration), end: end,
             appID: session.context.appID,
             keyboardID: session.context.keyboardID, inputSourceID: session.context.inputSourceID,
-            characters: session.characters, backspaces: session.backspaces, keystrokes: session.keystrokes
+            characters: session.characters, backspaces: session.backspaces, keystrokes: session.keystrokes,
+            deletions: session.deletions, activeSeconds: session.activeDuration
         )
     }
 
+    /// Older sessions without typing time or deletions fall back to their elapsed time and backspaces.
     public var totals: TypingTotals {
-        TypingTotals(characters: characters, backspaces: backspaces, keystrokes: keystrokes, duration: end.timeIntervalSince(start))
+        TypingTotals(characters: characters, backspaces: backspaces, deletions: deletions, keystrokes: keystrokes,
+                     duration: activeSeconds ?? end.timeIntervalSince(start))
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
@@ -154,6 +164,12 @@ public struct SessionStore: Sendable {
         }
         migrator.registerMigration("v4-layout-labels") { db in
             try db.alter(table: "inputSource") { t in t.add(column: "labels", .text) }
+        }
+        migrator.registerMigration("v5-typing-time") { db in
+            try db.alter(table: "session") { t in
+                t.add(column: "deletions", .integer)
+                t.add(column: "activeSeconds", .double)
+            }
         }
         return migrator
     }

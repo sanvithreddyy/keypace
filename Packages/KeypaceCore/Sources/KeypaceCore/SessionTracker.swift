@@ -1,26 +1,31 @@
-/// Splits key presses into sessions.
+/// Splits key presses into sessions and measures them.
 ///
-/// Characters and backspaces open and extend a session. Other keys count as keystrokes
-/// inside an open session but neither open one nor extend it, so time spent navigating
-/// with arrows or shortcuts doesn't dilute speed. Held-key character repeats are ignored;
-/// backspace repeats each delete a character, so they count as backspaces.
+/// Characters and deletions of characters typed in the session open and extend a session; other keys
+/// count as keystrokes but neither open nor extend one. Typing time is the sum of the gaps the
+/// `GapFilter` judges as typing, plus one usual gap for the keystroke that starts each burst, so pauses
+/// inside a session don't count and short bursts aren't overstated.
 ///
-/// Per-key counts cover characters and Delete presses only; shortcuts and navigation keys
-/// aren't counted per key, so a key's correction rate is over the characters it typed.
-/// Each backspace is charged to the key that typed the character it deletes. Key-pair
-/// timings cover consecutive character presses less than `maximumPairGap` apart; a
-/// backspace or any other key breaks the chain.
+/// A deletion only counts against speed and as a correction when it removes a character typed in the
+/// session; deleting text that was already there is editing. Option-Delete removes back to the start of
+/// the word and Command-Delete back to the start of the line, counting each character they remove.
+/// Each removed character is charged to the key that typed it. Held character repeats are ignored.
+/// Key-pair timings cover consecutive characters whose gap counted as typing.
 public struct SessionTracker: Sendable {
     public var inactivityTimeout: Double
     /// Sessions with fewer characters than this are discarded when they close.
     public var minimumCharacters: Int
-    /// Gaps longer than this are pauses, not transitions between keys.
-    public var maximumPairGap = 2.0
     public private(set) var current: TypingSession?
+    /// Speed over the last few seconds, across sessions.
+    public private(set) var live = LiveSpeed()
 
-    /// Keys of characters typed and not yet deleted, most recent last.
+    private var gaps = GapFilter()
+    /// Keys of characters typed in the open session and not yet deleted, most recent last.
     private var typedKeys: [UInt16] = []
-    private var lastCharacter: (keyCode: UInt16, time: Double)?
+    /// The last typing event in the open session; cleared by other keys and by editing.
+    private var lastTyping: (keyCode: UInt16, time: Double, isCharacter: Bool)?
+
+    private static let returnKeyCode: UInt16 = 36
+    private static let spaceKeyCode: UInt16 = 49
 
     public init(inactivityTimeout: Double = 5, minimumCharacters: Int = 10) {
         self.inactivityTimeout = inactivityTimeout
@@ -34,34 +39,46 @@ public struct SessionTracker: Sendable {
             closed = end()
         }
 
-        switch (press.kind, press.isRepeat) {
-        case (.character, true):
-            break
-        case (.other, true):
-            lastCharacter = nil
-        case (.other, false):
-            current?.keystrokes += 1
-            lastCharacter = nil
-        case (.character, false):
+        switch press.kind {
+        case .other:
+            if !press.isRepeat { current?.keystrokes += 1 }
+            lastTyping = nil
+        case .character:
+            guard !press.isRepeat else { break }
             var session = open(in: context, at: press.time)
             session.characters += 1
             session.keystrokes += 1
             session.keys[press.keyCode, default: KeyCount()].presses += 1
-            if let last = lastCharacter, press.time - last.time <= maximumPairGap {
-                session.pairs[KeyPair(from: last.keyCode, to: press.keyCode), default: PairTiming()] += PairTiming(count: 1, totalMilliseconds: (press.time - last.time) * 1000)
-            }
-            lastCharacter = (press.keyCode, press.time)
+            addTypingTime(to: &session, press: press, pairs: true)
             typedKeys.append(press.keyCode)
+            live.record(at: press.time, characters: 1)
+            lastTyping = (press.keyCode, press.time, true)
             current = session
-        case (.backspace, _):
+        case .backspace, .deleteWord, .deleteLine:
+            let removed = removeTyped(press.kind)
+            if removed.isEmpty {
+                // Deleting text that was there before the session is editing, not typing.
+                if current != nil {
+                    current?.backspaces += 1
+                    if !press.isRepeat {
+                        current?.keystrokes += 1
+                        current?.keys[press.keyCode, default: KeyCount()].presses += 1
+                    }
+                }
+                lastTyping = nil
+                break
+            }
             var session = open(in: context, at: press.time)
             session.backspaces += 1
+            session.deletions += removed.count
             if !press.isRepeat {
                 session.keystrokes += 1
                 session.keys[press.keyCode, default: KeyCount()].presses += 1
             }
-            if let deleted = typedKeys.popLast() { session.keys[deleted, default: KeyCount()].corrections += 1 }
-            lastCharacter = nil
+            for key in removed { session.keys[key, default: KeyCount()].corrections += 1 }
+            addTypingTime(to: &session, press: press, pairs: false)
+            live.record(at: press.time, characters: -removed.count)
+            lastTyping = (press.keyCode, press.time, false)
             current = session
         }
         return closed
@@ -78,7 +95,7 @@ public struct SessionTracker: Sendable {
         defer {
             current = nil
             typedKeys = []
-            lastCharacter = nil
+            lastTyping = nil
         }
         guard let session = current, session.characters >= minimumCharacters else { return nil }
         return session
@@ -89,5 +106,42 @@ public struct SessionTracker: Sendable {
         var session = current ?? TypingSession(context: context, start: time, end: time)
         session.end = time
         return session
+    }
+
+    /// Adds the gap before this press to the session's typing time if it was typing, or one usual gap
+    /// if the press starts a new burst.
+    private mutating func addTypingTime(to session: inout TypingSession, press: KeyPress, pairs: Bool) {
+        guard let last = lastTyping else {
+            session.activeDuration += gaps.typicalGap
+            return
+        }
+        let gap = press.time - last.time
+        if press.isRepeat {
+            // Held Delete fires at the key-repeat rate; that's typing time but not a typing gap to learn from.
+            session.activeDuration += gap <= gaps.config.ceiling ? gap : gaps.typicalGap
+        } else if gaps.accepts(gap, from: last.keyCode, to: press.keyCode) {
+            session.activeDuration += gap
+            if pairs, last.isCharacter {
+                session.pairs[KeyPair(from: last.keyCode, to: press.keyCode), default: PairTiming()] += PairTiming(count: 1, totalMilliseconds: gap * 1000)
+            }
+        } else {
+            session.activeDuration += gaps.typicalGap
+        }
+    }
+
+    /// Removes the characters a delete removes from the session's typed keys and returns them.
+    private mutating func removeTyped(_ kind: KeyPress.Kind) -> [UInt16] {
+        var removed: [UInt16] = []
+        func pop() { if let key = typedKeys.popLast() { removed.append(key) } }
+        switch kind {
+        case .deleteWord:
+            while typedKeys.last == Self.spaceKeyCode { pop() }
+            while let key = typedKeys.last, key != Self.spaceKeyCode, key != Self.returnKeyCode { pop() }
+        case .deleteLine:
+            while let key = typedKeys.last, key != Self.returnKeyCode { pop() }
+        default:
+            pop()
+        }
+        return removed
     }
 }
