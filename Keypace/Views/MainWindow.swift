@@ -10,6 +10,7 @@ struct MainWindow: View {
     }
 
     @State private var page: Page?
+    @Environment(\.openWindow) private var openWindow
 
     init(tracker: LiveTracker, page: Page = .overview) {
         self.tracker = tracker
@@ -36,6 +37,10 @@ struct MainWindow: View {
             Self.detail(for: page ?? .overview, tracker: tracker)
         }
         .frame(minWidth: 760, minHeight: 560)
+        .toolbar {
+            Button("Live Metrics", systemImage: "gauge.with.needle") { openWindow(id: "live") }
+                .help("Show speed as you type in a floating window")
+        }
     }
 
     @ViewBuilder

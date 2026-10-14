@@ -18,6 +18,14 @@ struct KeypaceApp: App {
             MainWindow(tracker: tracker)
         }
         .defaultSize(width: 900, height: 680)
+
+        Window("Live Metrics", id: "live") {
+            LiveMetrics(tracker: tracker)
+        }
+        .windowLevel(.floating)
+        .windowResizability(.contentSize)
+        .windowStyle(.hiddenTitleBar)
+        .defaultPosition(.topTrailing)
     }
 }
 
