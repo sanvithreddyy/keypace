@@ -69,7 +69,7 @@ overall), kept between 250 ms and 3 s; before there's any history, gaps up to
 short bursts aren't overstated.
 
 A session ends after 5 seconds without typing, or when you switch apps,
-keyboards or layouts. Sessions under 10 characters are discarded. Both limits
+keyboards or layouts. Sessions under 25 characters are discarded. Both limits
 are adjustable in Settings. Combined figures weight each session by its typing
 time.
 

@@ -29,7 +29,7 @@ patterns in the background and keeps everything on this Mac.
 2. Sessions and metrics
    - A session ends after N seconds without a keystroke (default 5) or when
      the frontmost app, keyboard or layout changes.
-   - Sessions shorter than the minimum size (default 10 characters) are not saved.
+   - Sessions shorter than the minimum size (default 25 characters) are not saved.
    - Typing time leaves out pauses: a gap counts when it's under 4× the median
      gap for that key pair, key or overall, clamped to 250 ms–3 s (600 ms before
      there's history). A burst's first keystroke gets one median gap.

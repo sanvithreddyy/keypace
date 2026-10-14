@@ -83,7 +83,7 @@ final class LiveTracker {
         self.defaults = defaults
         self.clock = clock
         let timeout = defaults.object(forKey: Keys.inactivityTimeout) as? Double ?? 5
-        let minimum = defaults.object(forKey: Keys.minimumCharacters) as? Int ?? 10
+        let minimum = defaults.object(forKey: Keys.minimumCharacters) as? Int ?? 25
         let strength = defaults.string(forKey: Keys.syntheticStrength).flatMap(SyntheticFilter.Strength.init) ?? .normal
         inactivityTimeout = timeout
         minimumCharacters = minimum

@@ -166,4 +166,13 @@ struct PipelineTests {
         #expect(tracker.liveWPM == nil)
         #expect(tracker.allSessions().count == 1)
     }
+
+    @Test func `a fresh install ignores sessions under 25 characters`() throws {
+        let tracker = try makeTracker(clock: clock, minimumCharacters: nil)
+        #expect(tracker.minimumCharacters == 25)
+        let typist = Typist(tracker: tracker, clock: clock)
+        typist.type("quick burst of text")
+        typist.pause()
+        #expect(tracker.allSessions().isEmpty)
+    }
 }

@@ -72,8 +72,11 @@ enum USKeys {
     ]
 }
 
+/// - Parameter minimumCharacters: short test sessions use 10; nil keeps the app's default.
 @MainActor
-func makeTracker(clock: TestClock) throws -> LiveTracker {
+func makeTracker(clock: TestClock, minimumCharacters: Int? = 10) throws -> LiveTracker {
     let defaults = UserDefaults(suiteName: "KeypaceTests-\(UUID().uuidString)")!
-    return LiveTracker(store: try SessionStore.inMemory(), defaults: defaults, clock: clock.clock, capture: false)
+    let tracker = LiveTracker(store: try SessionStore.inMemory(), defaults: defaults, clock: clock.clock, capture: false)
+    if let minimumCharacters { tracker.minimumCharacters = minimumCharacters }
+    return tracker
 }
