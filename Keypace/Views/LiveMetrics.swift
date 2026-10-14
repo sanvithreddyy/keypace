@@ -9,7 +9,7 @@ struct LiveMetrics: View {
         let _ = tracker.revision
         let session = tracker.current
         let today = PeriodData(.today, tracker: tracker).totals
-        let live = session.flatMap { $0.duration >= 3 ? $0.totals.wpm : nil }
+        let live = tracker.liveWPM
 
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {

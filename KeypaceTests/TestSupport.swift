@@ -41,6 +41,8 @@ struct Typist {
                 time: clock.uptime,
                 text: isDelete ? "\u{7F}" : String(character),
                 commandOrControl: false,
+                command: false,
+                option: false,
                 isRepeat: false,
                 sourceStateID: 1,
                 sourceProcessID: sourceProcessID

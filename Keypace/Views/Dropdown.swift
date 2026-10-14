@@ -258,10 +258,10 @@ private struct SpeedTab: View {
         .padding(.top, 8)
     }
 
-    /// The live session's speed once it has a few words, else the last session.
+    /// Speed over the last few seconds while typing, else the last session.
     @ViewBuilder private var session: some View {
-        if let current = tracker.current, current.duration >= 3, let wpm = current.totals.wpm {
-            Tile(title: "This session", value: Format.wpm(wpm), unit: "wpm", detail: Text(Format.duration(current.duration)))
+        if let live = tracker.liveWPM {
+            Tile(title: "Now", value: Format.wpm(live), unit: "wpm", detail: Text("last few seconds"))
         } else if let last = data.sessions.last {
             Tile(title: "Last session", value: Format.wpm(last.totals.wpm), unit: "wpm",
                  detail: Text(last.end.formatted(date: .omitted, time: .shortened)))

@@ -17,6 +17,8 @@ final class LiveTracker {
 
     private(set) var status = Status.needsPermission
     private(set) var current: TypingSession?
+    /// Speed over the last few seconds of typing; nil when not typing.
+    private(set) var liveWPM: Double?
     /// Bumped whenever stored history changes, so views reload.
     private(set) var revision = 0
     /// Set when the database can't be opened or written; sessions are not being saved.
@@ -210,7 +212,7 @@ final class LiveTracker {
         let press = KeyPress(
             time: key.time,
             keyCode: key.keyCode,
-            kind: KeyClassifier.kind(keyCode: key.keyCode, commandOrControl: key.commandOrControl, text: key.text),
+            kind: KeyClassifier.kind(keyCode: key.keyCode, commandOrControl: key.commandOrControl, command: key.command, option: key.option, text: key.text),
             isRepeat: key.isRepeat
         )
         let context = TypingContext(appID: appID, keyboardID: keyboard?.id, inputSourceID: inputSource?.id)
@@ -218,12 +220,14 @@ final class LiveTracker {
         if let keyboard { seenKeyboards[keyboard.id] = keyboard }
         if let inputSource { seenInputSources[inputSource.id] = inputSource }
         current = engine.current
+        liveWPM = engine.live.wordsPerMinute(at: key.time)
     }
 
     /// Closes an idle session and writes pending counts. Runs every second while capturing.
     func tick() {
         if let closed = engine.closeIfIdle(at: clock.uptime()) { save(closed) }
         current = engine.current
+        liveWPM = engine.live.wordsPerMinute(at: clock.uptime())
         ticks += 1
         if ticks % 60 == 0 { flushSynthetic() }
     }

@@ -8,6 +8,8 @@ struct ObservedKey {
     var time: Double
     var text: String
     var commandOrControl: Bool
+    var command: Bool
+    var option: Bool
     var isRepeat: Bool
     /// Where the event came from; used to tell real keystrokes from posted ones.
     var sourceStateID: Int64
@@ -70,6 +72,8 @@ final class KeyboardMonitor {
                 time: nsEvent.timestamp,
                 text: nsEvent.characters ?? "",
                 commandOrControl: flags.contains(.maskCommand) || flags.contains(.maskControl),
+                command: flags.contains(.maskCommand),
+                option: flags.contains(.maskAlternate),
                 isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
                 sourceStateID: event.getIntegerValueField(.eventSourceStateID),
                 sourceProcessID: event.getIntegerValueField(.eventSourceUnixProcessID)

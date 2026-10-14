@@ -21,9 +21,9 @@ struct PipelineTests {
         #expect(session.appID == "com.apple.Notes")
         #expect(session.keyboardID == "1452:834")
         #expect(session.inputSourceID == "com.apple.keylayout.US")
-        // 43 presses 0.2 s apart span 8.4 s: 43 / 5 words in 8.4 s.
+        // 42 gaps of 0.2 s plus one usual gap for the first press: 8.6 s of typing for 43 characters.
         let wpm = try #require(session.totals.wpm)
-        let expected: Double = 43.0 / 5 / 8.4 * 60
+        let expected: Double = 60
         #expect(abs(wpm - expected) < 1e-6)
 
         let day = DateInterval(start: clock.date.addingTimeInterval(-86_400), end: clock.date.addingTimeInterval(86_400))
@@ -127,5 +127,34 @@ struct PipelineTests {
         let thatDay = calendar.dateInterval(of: .day, for: lateNight)!
         #expect(tracker.syntheticCount(in: thatDay) == 1)
         #expect(tracker.revision > revision)
+    }
+
+    @Test func `live speed follows the last few seconds and clears when typing stops`() throws {
+        let tracker = try makeTracker(clock: clock)
+        let typist = Typist(tracker: tracker, clock: clock)
+        typist.type("the quick brown fox", interval: 0.15)
+        // 19 characters 0.15 s apart: 18 counted over 2.7 s.
+        let live = try #require(tracker.liveWPM)
+        let expected: Double = 18.0 / 5 / (2.7 / 60)
+        #expect(abs(live - expected) < 1e-6)
+        clock.advance(2.5)
+        tracker.tick()
+        #expect(tracker.liveWPM == nil)
+    }
+
+    @Test func `option-delete from the keyboard removes the whole word`() throws {
+        let tracker = try makeTracker(clock: clock)
+        let typist = Typist(tracker: tracker, clock: clock)
+        typist.type("hello brave world")
+        clock.advance(0.2)
+        let optionDelete = ObservedKey(keyCode: 51, time: clock.uptime, text: "\u{7F}", commandOrControl: false,
+                                       command: false, option: true, isRepeat: false, sourceStateID: 1, sourceProcessID: 0)
+        tracker.handle(optionDelete, appID: "com.apple.Notes", keyboard: typist.keyboard, inputSource: typist.inputSource)
+        typist.pause()
+
+        let session = try #require(tracker.allSessions().first)
+        #expect(session.characters == 17)
+        #expect(session.deletions == 5)
+        #expect(session.totals.netCharacters == 12)
     }
 }

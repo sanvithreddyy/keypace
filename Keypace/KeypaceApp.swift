@@ -46,7 +46,7 @@ private struct MenuBarLabel: View {
     }
 
     private var wpm: Double? {
-        if number == .liveThenToday, let current = tracker.current, current.duration >= 3, let wpm = current.totals.wpm { return wpm }
+        if number == .liveThenToday, let live = tracker.liveWPM { return live }
         _ = tracker.revision
         return PeriodData(.today, tracker: tracker).totals.wpm
     }
