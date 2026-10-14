@@ -96,4 +96,36 @@ struct PipelineTests {
         #expect(data.sessions.count == 1)
         #expect(data.totals.characters == 43)
     }
+
+    @Test func `deleting an app's history also drops its unsaved typing`() throws {
+        let tracker = try makeTracker(clock: clock)
+        var typist = Typist(tracker: tracker, clock: clock)
+        typist.type("the quick brown fox jumps over the lazy dog")
+        typist.sourceProcessID = 4242
+        typist.type("expanded snippet", interval: 0.001)
+        tracker.deleteHistory(appID: "com.apple.Notes")
+        typist.pause()
+        tracker.endSession()
+
+        #expect(tracker.allSessions().isEmpty)
+        #expect(tracker.keyStats(in: DateInterval(start: .distantPast, end: .distantFuture)).isEmpty)
+        #expect(tracker.syntheticCount(in: DateInterval(start: .distantPast, end: .distantFuture)) == 0)
+    }
+
+    @Test func `filtered input is dated when it arrives`() throws {
+        let calendar = Calendar.current
+        let lateNight = calendar.date(bySettingHour: 23, minute: 59, second: 58, of: clock.date)!
+        let lateClock = TestClock(date: lateNight)
+        let tracker = try makeTracker(clock: lateClock)
+        var expander = Typist(tracker: tracker, clock: lateClock)
+        expander.sourceProcessID = 4242
+        expander.type("x", interval: 0.001)
+        lateClock.advance(4)
+        let revision = tracker.revision
+        tracker.endSession()
+
+        let thatDay = calendar.dateInterval(of: .day, for: lateNight)!
+        #expect(tracker.syntheticCount(in: thatDay) == 1)
+        #expect(tracker.revision > revision)
+    }
 }

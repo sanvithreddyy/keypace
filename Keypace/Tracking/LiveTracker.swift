@@ -52,8 +52,13 @@ final class LiveTracker {
     private let devices: KeyboardDevices?
     private var engine: SessionTracker
     private var synthetic: SyntheticFilter
-    /// Synthetic presses not yet written, per app.
-    private var pendingSynthetic: [String: Int] = [:]
+    /// Synthetic presses not yet written, per day received and app.
+    private var pendingSynthetic: [SyntheticBucket: Int] = [:]
+
+    private struct SyntheticBucket: Hashable {
+        var day: String
+        var appID: String
+    }
     /// Keyboards and layouts typed on since the last save.
     private var seenKeyboards: [String: KeyboardRecord] = [:]
     private var seenInputSources: [String: InputSourceRecord] = [:]
@@ -162,6 +167,12 @@ final class LiveTracker {
     }
 
     func deleteHistory(appID: String) {
+        // Drop anything not yet saved for the app, so it can't be written back afterwards.
+        pendingSynthetic = pendingSynthetic.filter { $0.key.appID != appID }
+        if engine.current?.context.appID == appID {
+            engine = SessionTracker(inactivityTimeout: inactivityTimeout, minimumCharacters: minimumCharacters)
+            current = nil
+        }
         attempt { try store?.deleteSessions(appID: appID) }
         revision += 1
     }
@@ -193,7 +204,7 @@ final class LiveTracker {
             return
         }
         if synthetic.isSynthetic(sourceStateID: key.sourceStateID, sourceProcessID: key.sourceProcessID, time: key.time, isRepeat: key.isRepeat) {
-            pendingSynthetic[appID, default: 0] += 1
+            pendingSynthetic[SyntheticBucket(day: Day.key(clock.now(), calendar: .current), appID: appID), default: 0] += 1
             return
         }
         let press = KeyPress(
@@ -237,11 +248,11 @@ final class LiveTracker {
 
     private func flushSynthetic() {
         guard !pendingSynthetic.isEmpty else { return }
-        let day = Day.key(clock.now(), calendar: .current)
-        for (appID, count) in pendingSynthetic {
-            attempt { try store?.addSynthetic(count: count, appID: appID, day: day) }
+        for (bucket, count) in pendingSynthetic {
+            attempt { try store?.addSynthetic(count: count, appID: bucket.appID, day: bucket.day) }
         }
         pendingSynthetic = [:]
+        revision += 1
     }
 
     // MARK: Capture
