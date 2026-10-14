@@ -49,6 +49,11 @@ final class KeyboardDevices {
         let transport: String = property(kIOHIDTransportKey) ?? ""
         let builtIn = (property(kIOHIDBuiltInKey) as Bool?) ?? ["SPI", "FIFO"].contains(transport)
         let name: String = property(kIOHIDProductKey) ?? (builtIn ? "Built-in Keyboard" : "Keyboard")
-        return KeyboardRecord(id: "\(vendor):\(product)", name: name, isBuiltIn: builtIn, lastSeen: .now)
+        // Vendor and product identify the model and the serial number separates two of the same model.
+        // Some keyboards, including Apple's built-in one, report neither ID; their name stands in.
+        let serial = (property(kIOHIDSerialNumberKey) as String?).flatMap { $0.isEmpty ? nil : $0 }
+        let model = vendor == 0 && product == 0 ? name : "\(vendor):\(product)"
+        let id = [model, serial].compactMap { $0 }.joined(separator: ":")
+        return KeyboardRecord(id: id, name: name, isBuiltIn: builtIn, lastSeen: .now)
     }
 }

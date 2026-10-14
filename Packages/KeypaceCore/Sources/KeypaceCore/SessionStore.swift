@@ -336,7 +336,8 @@ public enum Day {
 
 public struct KeyboardRecord: Codable, Sendable, Equatable, FetchableRecord, TableRecord {
     public static let databaseTableName = "keyboard"
-    /// Vendor and product, e.g. "1452:834".
+    /// Vendor and product, plus the serial number when reported, e.g. "1133:50475:F2A1";
+    /// the device name for keyboards without IDs, e.g. "Apple Internal Keyboard / Trackpad".
     public var id: String
     public var name: String
     public var isBuiltIn: Bool
