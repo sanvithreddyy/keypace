@@ -35,7 +35,9 @@ patterns in the background and keeps everything on this Mac.
      there's history). A burst's first keystroke gets one median gap.
    - WPM = characters that stayed ÷ 5 per minute of typing time; CPM; KPM.
    - Deletions count only when they remove characters typed in the session;
-     Option-Delete removes the word, Command-Delete the line. Corrections =
+     Option-Delete uses transient character categories to estimate the word;
+     Command-Delete is editing and clears ownership because visual line wrapping
+     is unknown. Corrections =
      deleted ÷ typed, labeled as corrections, not accuracy.
    - Held character keys count once; a held Delete counts every deletion.
    - Per-key corrections: each deleted character is charged to the key that

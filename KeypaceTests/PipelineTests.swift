@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import KeypaceCore
@@ -172,6 +173,56 @@ struct PipelineTests {
         #expect(saved.characters == 20)
         #expect(saved.deletions == 0)
         #expect(abs(try #require(saved.totals.wpm) - 60) < 1e-6)
+    }
+
+    @Test(arguments: ["foo-bar", "foo\tbar", "foo\n", "foo/bar", "can't", "foo_bar", "foo-", "hello, world", "'foo", "foo''bar", "foo©", "foo$", "foo©$", "foo$© ", "foo$$", "foo++", "foo==", "foo©©", "example.com", "foo.bar", "3.14", ".foo", "foo..bar", "e.g."])
+    func `option-delete respects native word boundaries`(text: String) throws {
+        let tracker = try makeTracker(clock: clock, minimumCharacters: 1)
+        let typist = Typist(tracker: tracker, clock: clock)
+        typist.type(text)
+
+        let editor = NSTextView(frame: .zero)
+        editor.string = text
+        editor.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
+        editor.deleteWordBackward(nil)
+        let removed = text.count - editor.string.count
+        clock.advance(0.2)
+        tracker.handle(ObservedKey(keyCode: 51, time: clock.uptime, text: "\u{7F}", commandOrControl: false,
+                                   command: false, option: true, isRepeat: false, sourceStateID: 1, sourceProcessID: 0),
+                       appID: typist.appID, keyboard: typist.keyboard, inputSource: typist.inputSource)
+        #expect(tracker.current?.deletions == removed)
+        // Ownership of the remaining suffix must also match the next ordinary Delete.
+        typist.type("⌫")
+        typist.pause()
+        let saved = try #require(tracker.allSessions().first)
+        #expect(saved.deletions == removed + (editor.string.isEmpty ? 0 : 1))
+    }
+
+    @Test func `command-delete does not guess a wrapped line length`() throws {
+        let tracker = try makeTracker(clock: clock)
+        let typist = Typist(tracker: tracker, clock: clock)
+        let text = String(repeating: "hello world ", count: 8)
+        typist.type(text)
+        let editor = NSTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 500))
+        editor.isHorizontallyResizable = false
+        editor.textContainer!.containerSize = NSSize(width: 100, height: 10_000)
+        editor.textContainer!.widthTracksTextView = true
+        editor.string = text
+        editor.layoutManager!.ensureLayout(for: editor.textContainer!)
+        editor.setSelectedRange(NSRange(location: text.count, length: 0))
+        editor.deleteToBeginningOfLine(nil)
+        #expect(editor.string.count > 0 && editor.string.count < text.count)
+        clock.advance(0.2)
+        tracker.handle(ObservedKey(keyCode: 51, time: clock.uptime, text: "\u{7F}", commandOrControl: true,
+                                   command: true, option: false, isRepeat: false, sourceStateID: 1, sourceProcessID: 0),
+                       appID: typist.appID, keyboard: typist.keyboard, inputSource: typist.inputSource)
+        typist.type("⌫")
+        typist.pause()
+        let saved = try #require(tracker.allSessions().first)
+        #expect(saved.characters == text.count)
+        #expect(saved.deletions == 0)
+        let keys = tracker.keyStats(in: DateInterval(start: .distantPast, end: .distantFuture))
+        #expect(keys.values.allSatisfy { $0.corrections == 0 })
     }
 
     @Test func `live speed clears when capture stops`() throws {

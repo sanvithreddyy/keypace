@@ -75,8 +75,11 @@ time.
 
 Deletions only count when they remove characters typed in the same session
 and still right before the cursor; deleting text that was already there, or
-after a click, arrow key or shortcut moved the cursor, is editing. Option-Delete and
-Command-Delete count every character they remove. Corrections include
+after a click, arrow key or shortcut moved the cursor, is editing. Option-Delete
+uses temporary word-boundary categories; word segmentation can differ by editor
+and language.
+Command-Delete is editing and clears ownership because keyboard events cannot
+reveal visual line wrapping. Corrections include
 deliberate rewrites, so the app calls them corrections rather than accuracy.
 Each deletion is charged to the key whose character it removed. Key-pair
 timings cover consecutive characters whose gap counted as typing. Finger

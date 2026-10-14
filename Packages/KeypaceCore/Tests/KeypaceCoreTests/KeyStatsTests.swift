@@ -127,6 +127,19 @@ struct OwnershipTests {
         return try #require(ended)
     }
 
+    @Test func `word boundaries follow produced text rather than physical key labels`() throws {
+        let session = try run { tracker in
+            for (i, character) in "foo-bar".enumerated() {
+                // A remapped layout can produce punctuation from any physical key.
+                _ = tracker.record(KeyPress(time: Double(i) * 0.2, keyCode: 0, kind: .character,
+                                            textCategory: KeyClassifier.textCategory(String(character))), in: app)
+            }
+            _ = tracker.record(KeyPress(time: 1.4, keyCode: 51, kind: .deleteWord), in: app)
+        }
+        #expect(session.deletions == 3)
+        #expect(session.totals.netCharacters == 4)
+    }
+
     @Test func `after the cursor moves, deleting older text isn't a correction`() throws {
         let session = try run { tracker in
             _ = tracker.record(KeyPress(time: 0, keyCode: 0, kind: .character), in: app)
@@ -191,7 +204,7 @@ struct OwnershipTests {
         #expect(session.keys[49]?.corrections == 1)
     }
 
-    @Test func `a held return stays a line boundary`() throws {
+    @Test func `line deletion forgets ownership including held returns`() throws {
         let session = try run { tracker in
             _ = tracker.record(KeyPress(time: 0, keyCode: 0, kind: .character), in: app) // a
             _ = tracker.record(KeyPress(time: 0.2, keyCode: 36, kind: .character), in: app) // ⏎
@@ -200,7 +213,7 @@ struct OwnershipTests {
             _ = tracker.record(KeyPress(time: 0.9, keyCode: 51, kind: .deleteLine), in: app) // removes b
             _ = tracker.record(KeyPress(time: 1.1, keyCode: 51, kind: .backspace), in: app) // removes the held ⏎
         }
-        #expect(session.deletions == 1)
+        #expect(session.deletions == 0)
         #expect(session.keys[36]?.corrections == 0)
     }
 }

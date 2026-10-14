@@ -7,7 +7,8 @@
 ///
 /// A deletion only counts against speed and as a correction when it removes a character typed in the
 /// session; deleting text that was already there is editing. Option-Delete removes back to the start of
-/// the word and Command-Delete back to the start of the line, counting each character they remove.
+/// the word, using transient character categories for boundaries. Command-Delete is editing because
+/// visual line wrapping is unknown; it forgets ownership rather than guessing a deletion count.
 /// Each removed character is charged to the key that typed it. Held character repeats are ignored.
 /// Key-pair timings cover consecutive characters whose gap counted as typing.
 public struct SessionTracker: Sendable {
@@ -21,12 +22,9 @@ public struct SessionTracker: Sendable {
     private var gaps = GapFilter()
     /// Characters typed in the open session and not yet deleted, most recent last. Held-key repeats are
     /// kept so deletes and word boundaries see them, but they aren't counted.
-    private var typedKeys: [(keyCode: UInt16, counted: Bool)] = []
+    private var typedKeys: [(keyCode: UInt16, counted: Bool, category: KeyPress.TextCategory)] = []
     /// The last typing event in the open session; cleared by other keys and by editing.
     private var lastTyping: (keyCode: UInt16, time: Double, isCharacter: Bool)?
-
-    private static let returnKeyCode: UInt16 = 36
-    private static let spaceKeyCode: UInt16 = 49
 
     public init(inactivityTimeout: Double = 5, minimumCharacters: Int = 10) {
         self.inactivityTimeout = inactivityTimeout
@@ -48,14 +46,14 @@ public struct SessionTracker: Sendable {
         case .character where press.isRepeat:
             // A held key types more characters. They aren't counted, but deleting them mustn't be charged
             // to the characters typed before them.
-            if current != nil { typedKeys.append((press.keyCode, false)) }
+            if current != nil { typedKeys.append((press.keyCode, false, press.textCategory)) }
         case .character:
             var session = open(in: context, at: press.time)
             session.characters += 1
             session.keystrokes += 1
             session.keys[press.keyCode, default: KeyCount()].presses += 1
             let typingSeconds = addTypingTime(to: &session, press: press, pairs: true)
-            typedKeys.append((press.keyCode, true))
+            typedKeys.append((press.keyCode, true, press.textCategory))
             live.record(at: press.time, characters: 1, typingSeconds: typingSeconds)
             lastTyping = (press.keyCode, press.time, true)
             current = session
@@ -153,14 +151,30 @@ public struct SessionTracker: Sendable {
 
     /// Removes the characters a delete removes from the session's typed keys and returns the counted ones.
     private mutating func removeTyped(_ kind: KeyPress.Kind) -> [UInt16] {
-        var removed: [(keyCode: UInt16, counted: Bool)] = []
+        var removed: [(keyCode: UInt16, counted: Bool, category: KeyPress.TextCategory)] = []
         func pop() { if let key = typedKeys.popLast() { removed.append(key) } }
         switch kind {
         case .deleteWord:
-            while typedKeys.last?.keyCode == Self.spaceKeyCode { pop() }
-            while let key = typedKeys.last?.keyCode, key != Self.spaceKeyCode, key != Self.returnKeyCode { pop() }
+            // A trailing separator or whitespace is deleted with the preceding word.
+            while let last = typedKeys.last, last.category != .word && last.category != .symbol { pop() }
+            if typedKeys.last?.category == .symbol {
+                pop()
+                break
+            }
+            while let last = typedKeys.last {
+                if last.category == .word {
+                    pop()
+                } else if last.category == .joiner, typedKeys.count >= 2,
+                          typedKeys[typedKeys.count - 2].category == .word {
+                    // Join contractions and dotted words, but leave opening quotes and leading dots outside.
+                    pop()
+                } else {
+                    break
+                }
+            }
         case .deleteLine:
-            while let key = typedKeys.last?.keyCode, key != Self.returnKeyCode { pop() }
+            // Keyboard events cannot reveal where the editor wrapped this line.
+            typedKeys = []
         default:
             pop()
         }

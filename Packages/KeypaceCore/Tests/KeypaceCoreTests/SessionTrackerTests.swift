@@ -182,12 +182,12 @@ struct DeleteScopeTests {
         #expect(try typed([4, 34, 49], then: .deleteWord).deletions == 3)
     }
 
-    @Test func `command-delete removes the line before the cursor`() throws {
-        // "ab⏎cd" then Command-Delete removes "cd" and keeps the line break.
+    @Test func `command-delete forgets ownership instead of guessing the line length`() throws {
+        // The editor may soft-wrap "ab⏎cd"; keyboard events alone don't reveal the visual line.
         let session = try typed([0, 11, 36, 8, 2], then: .deleteLine)
-        #expect(session.deletions == 2)
+        #expect(session.deletions == 0)
         #expect(session.backspaces == 1)
-        #expect(session.keys[8]?.corrections == 1)
+        #expect(session.keys[8]?.corrections == 0)
         #expect(session.keys[36]?.corrections == 0)
     }
 }

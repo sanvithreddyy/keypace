@@ -213,7 +213,8 @@ final class LiveTracker {
             time: key.time,
             keyCode: key.keyCode,
             kind: KeyClassifier.kind(keyCode: key.keyCode, commandOrControl: key.commandOrControl, command: key.command, option: key.option, text: key.text),
-            isRepeat: key.isRepeat
+            isRepeat: key.isRepeat,
+            textCategory: KeyClassifier.textCategory(key.text)
         )
         let context = TypingContext(appID: appID, keyboardID: keyboard?.id, inputSourceID: inputSource?.id)
         if let closed = engine.record(press, in: context) { save(closed) }

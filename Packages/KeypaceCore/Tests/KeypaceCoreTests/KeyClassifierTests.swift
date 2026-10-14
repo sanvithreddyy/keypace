@@ -2,6 +2,11 @@ import Testing
 @testable import KeypaceCore
 
 struct KeyClassifierTests {
+    @Test(arguments: ["é", "e\u{301}", "7", "_"])
+    func `word categories retain accented characters and numbers`(text: String) {
+        #expect(KeyClassifier.textCategory(text) == .word)
+    }
+
     @Test(arguments: ["a", "Z", "7", " ", ".", "é", "\r", "\t", "©"])
     func `text-producing keys are characters`(text: String) {
         #expect(KeyClassifier.kind(keyCode: 0, commandOrControl: false, text: text) == .character)
