@@ -16,6 +16,7 @@ struct SnapshotTests {
         let clock = TestClock(date: .now)
         tracker = try makeTracker(clock: clock)
         SampleData.fill(tracker, clock: clock, days: 45, endingAt: .now)
+        SampleData.typeToday(tracker, clock: clock)
     }
 
     /// Pages are rendered without the window's sidebar: offscreen rendering skips translucent backgrounds.
@@ -28,11 +29,15 @@ struct SnapshotTests {
         try render(LiveMetrics(tracker: tracker), size: CGSize(width: 220, height: 100), name: "live-metrics")
     }
 
-    @Test(arguments: [Period.today, .week])
-    func dropdown(period: Period) throws {
+    @Test(arguments: [(Dropdown.Tab.speed, Period.today), (.speed, .week), (.speed, .month), (.keys, .week), (.apps, .week), (.records, .today)])
+    func dropdown(tab: Dropdown.Tab, period: Period) throws {
+        UserDefaults.standard.set(tab.rawValue, forKey: "dropdownTab")
         UserDefaults.standard.set(period.rawValue, forKey: "dropdownPeriod")
-        defer { UserDefaults.standard.removeObject(forKey: "dropdownPeriod") }
-        try render(Dropdown(tracker: tracker), size: CGSize(width: 340, height: 640), name: "dropdown-\(period)")
+        defer {
+            UserDefaults.standard.removeObject(forKey: "dropdownTab")
+            UserDefaults.standard.removeObject(forKey: "dropdownPeriod")
+        }
+        try render(Dropdown(tracker: tracker), size: CGSize(width: 340, height: 640), name: "dropdown-\(tab)-\(period)")
     }
 
     private func render(_ view: some View, size: CGSize, name: String) throws {

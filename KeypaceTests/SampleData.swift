@@ -60,6 +60,20 @@ enum SampleData {
     }
 }
 
+extension SampleData {
+    /// A few sessions in the hours before now, so today's views have something to show at any time of day.
+    static func typeToday(_ tracker: LiveTracker, clock: TestClock) {
+        let now = clock.date
+        for (hoursAgo, pace) in [(3.0, 0.17), (2.0, 0.15), (1.0, 0.16), (0.2, 0.14)] {
+            clock.date = now.addingTimeInterval(-hoursAgo * 3600)
+            let typist = Typist(tracker: tracker, clock: clock)
+            for sentence in sentences.prefix(4) { typist.type(sentence + " ", interval: pace) }
+            typist.pause()
+        }
+        clock.date = now
+    }
+}
+
 /// Deterministic random numbers so snapshots don't change between runs.
 struct SeededGenerator: RandomNumberGenerator {
     private var state: UInt64

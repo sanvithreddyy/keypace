@@ -35,25 +35,6 @@ struct SectionHeading: View {
     }
 }
 
-/// Label on the left, value right-aligned, for use inside a `Grid`.
-struct ValueRow: View {
-    let label: String
-    let value: String
-    init(_ label: String, _ value: String) {
-        self.label = label
-        self.value = value
-    }
-
-    var body: some View {
-        GridRow {
-            Text(label)
-            Text(value).monospacedDigit().foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-        .font(.callout)
-    }
-}
-
 /// App name over a thin bar sized by typing time, with time and wpm in right-hand columns.
 struct AppBars: View {
     let apps: [(appID: String, totals: TypingTotals)]
