@@ -71,7 +71,12 @@ Corrections count every deletion, including deliberate rewrites, so the app
 calls them corrections rather than accuracy. Each deletion is charged to the
 key whose character it removed. Key-pair timings cover consecutive characters
 typed less than two seconds apart. Finger statistics assume touch-typing
-finger assignments.
+finger assignments. Shortcuts and navigation keys count as keystrokes but not
+per key, so a key's correction rate is over the characters it typed.
+
+Key and key-pair statistics are grouped by the local day they were typed on.
+After a time-zone change, days near midnight can differ slightly from session
+totals, which are regrouped in the current time zone.
 
 Keystrokes from a physical keyboard arrive from the HID system with no posting
 process; anything else (text expanders, automation, scripted typing) is counted
