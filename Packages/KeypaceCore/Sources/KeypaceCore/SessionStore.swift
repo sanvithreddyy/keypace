@@ -281,8 +281,9 @@ public struct SessionStore: Sendable {
 
     /// Key presses filtered out as synthetic in the hours overlapping the interval, optionally for one app.
     public func syntheticCount(in interval: DateInterval, appID: String? = nil) throws -> Int {
+        guard interval.duration > 0 else { return 0 }
         var sql = "SELECT COALESCE(SUM(count), 0) FROM syntheticStat WHERE hour >= ? AND hour < ?"
-        var arguments: [any DatabaseValueConvertible] = [Hour.index(interval.start), Hour.index(interval.end.addingTimeInterval(3599))]
+        var arguments: [any DatabaseValueConvertible] = [Hour.index(interval.start), Hour.index(interval.end, roundingUp: true)]
         if let appID {
             sql += " AND appID = ?"
             arguments.append(appID)
@@ -336,8 +337,9 @@ public struct StatFilter: Sendable, Equatable {
 
 /// Hours since 1970 in UTC, the bucket for filtered-input counts.
 public enum Hour {
-    public static func index(_ date: Date) -> Int {
-        Int((date.timeIntervalSince1970 / 3600).rounded(.down))
+    /// - Parameter roundingUp: true for an exclusive upper bound, so a partial hour counts.
+    public static func index(_ date: Date, roundingUp: Bool = false) -> Int {
+        Int((date.timeIntervalSince1970 / 3600).rounded(roundingUp ? .up : .down))
     }
 }
 

@@ -74,9 +74,10 @@ struct StatStoreTests {
         let day = DateInterval(start: monday, duration: 86_400)
         #expect(try store.syntheticCount(in: day) == 27)
         #expect(try store.syntheticCount(in: day, appID: "com.apple.mail") == 7)
-        // An interval ending mid-hour includes that hour; one ending on the hour doesn't.
-        #expect(try store.syntheticCount(in: DateInterval(start: monday, end: monday.addingTimeInterval(9 * 3600 + 60))) == 20)
+        // An interval ending even a moment into an hour includes it; one ending on the hour doesn't.
+        #expect(try store.syntheticCount(in: DateInterval(start: monday, end: monday.addingTimeInterval(9 * 3600 + 0.25))) == 20)
         #expect(try store.syntheticCount(in: DateInterval(start: monday, end: monday.addingTimeInterval(9 * 3600))) == 0)
+        #expect(try store.syntheticCount(in: DateInterval(start: monday.addingTimeInterval(9 * 3600 + 300), duration: 0)) == 0)
     }
 
     @Test func `layout labels are kept and not erased by a later sighting without them`() throws {
