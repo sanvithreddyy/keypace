@@ -44,7 +44,8 @@ enum SampleData {
                     var text = sentences[Int.random(in: 0..<sentences.count, using: &generator)] + " "
                     if Double.random(in: 0...1, using: &generator) < 0.5 {
                         let index = text.index(text.startIndex, offsetBy: Int.random(in: 3..<20, using: &generator))
-                        text.insert(contentsOf: "x⌫", at: index)
+                        let typo = "qwertyuiopasdfghjklzxcvbnm".randomElement(using: &generator)!
+                        text.insert(contentsOf: "\(typo)⌫", at: index)
                     }
                     for character in text {
                         typist.type(String(character), interval: pace * Double.random(in: 0.6...1.5, using: &generator))

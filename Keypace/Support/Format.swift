@@ -5,8 +5,13 @@ enum Format {
         value.map { "\(Int($0.rounded()))" } ?? "–"
     }
 
-    static func percent(_ value: Double?) -> String {
-        value.map { $0.formatted(.percent.precision(.fractionLength(1))) } ?? "–"
+    static func percent(_ value: Double?, decimals: Int = 1) -> String {
+        value.map { $0.formatted(.percent.precision(.fractionLength(decimals))) } ?? "–"
+    }
+
+    /// "820 m", "1.4 km".
+    static func distance(_ metres: Double) -> String {
+        metres >= 1000 ? "\((metres / 1000).formatted(.number.precision(.fractionLength(1)))) km" : "\(Int(metres.rounded())) m"
     }
 
     /// "1h 12m", "18 min", "45 s".

@@ -84,3 +84,40 @@ struct AppBars: View {
         .monospacedDigit()
     }
 }
+
+/// One labelled value in a row of stat blocks divided by hairlines.
+struct StatBlock: View {
+    let label: String
+    let value: String
+    var change: String?
+    var changeColor: Color = .secondary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.title3.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
+            if let change { Text(change).font(.caption).foregroundStyle(changeColor) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .monospacedDigit()
+    }
+}
+
+/// A 2-point bar; the emphasized one is full ink, the rest gray.
+struct Bar: View {
+    let fraction: Double
+    var emphasized = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.quaternary)
+                Capsule().fill(emphasized ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                    .frame(width: proxy.size.width * min(max(fraction, 0), 1))
+            }
+        }
+        .frame(height: 2)
+    }
+}
