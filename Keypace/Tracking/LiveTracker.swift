@@ -89,6 +89,9 @@ final class LiveTracker {
         if capture {
             startCapture()
             observeSleep()
+        } else {
+            // Key events arrive through `handle` instead of the tap.
+            status = .running
         }
     }
 
