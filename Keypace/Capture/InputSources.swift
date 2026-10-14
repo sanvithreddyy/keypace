@@ -5,7 +5,8 @@ import KeypaceCore
 /// The active keyboard input source, and what each key types under it.
 final class InputSources {
     private(set) var current: InputSourceRecord?
-    private var labels: [UInt16: String] = [:]
+    /// Cached labels, keyed by layout (nil for the active one) and key code.
+    private var labels: [String?: [UInt16: String]] = [:]
     private var observer: NSObjectProtocol?
 
     init() {
@@ -18,11 +19,13 @@ final class InputSources {
     }
 
     /// The character a key types with no modifiers, uppercased; named keys get their name.
-    func label(for keyCode: UInt16) -> String {
+    /// - Parameter inputSourceID: the layout to label with; nil for the active layout.
+    func label(for keyCode: UInt16, inputSourceID: String? = nil) -> String {
         if let named = Self.namedKeys[keyCode] { return named }
-        if let cached = labels[keyCode] { return cached }
-        let label = Self.translate(keyCode)?.uppercased() ?? ""
-        labels[keyCode] = label
+        if let cached = labels[inputSourceID]?[keyCode] { return cached }
+        let layout = inputSourceID.flatMap(Self.layoutSource) ?? TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue()
+        let label = layout.flatMap { Self.translate(keyCode, with: $0) }?.uppercased() ?? ""
+        labels[inputSourceID, default: [:]][keyCode] = label
         return label
     }
 
@@ -41,9 +44,15 @@ final class InputSources {
         return Unmanaged<CFString>.fromOpaque(pointer).takeUnretainedValue() as String
     }
 
-    private static func translate(_ keyCode: UInt16) -> String? {
-        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
-              let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
+    /// The installed input source with this identifier, if it carries a key layout.
+    private static func layoutSource(id: String) -> TISInputSource? {
+        let filter = [kTISPropertyInputSourceID as String: id] as CFDictionary
+        guard let sources = TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource] else { return nil }
+        return sources.first { TISGetInputSourceProperty($0, kTISPropertyUnicodeKeyLayoutData) != nil }
+    }
+
+    private static func translate(_ keyCode: UInt16, with source: TISInputSource) -> String? {
+        guard let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
         let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data
         return data.withUnsafeBytes { buffer -> String? in
             guard let layout = buffer.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return nil }

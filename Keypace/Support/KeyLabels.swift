@@ -1,13 +1,14 @@
-/// Labels for key caps: from the active layout when available, otherwise the US layout.
+/// Labels for key caps: from the given layout, else the active one, else the US layout.
+/// Statistics combined across layouts are labeled with the active layout.
 enum KeyLabels {
-    static func label(_ keyCode: UInt16, using sources: InputSources?) -> String {
-        if let label = sources?.label(for: keyCode), !label.isEmpty { return label }
+    static func label(_ keyCode: UInt16, using sources: InputSources?, layout: String? = nil) -> String {
+        if let label = sources?.label(for: keyCode, inputSourceID: layout), !label.isEmpty { return label }
         return us[keyCode] ?? "?"
     }
 
     /// A key pair as it reads in text: "T → H", with Space shown as ␣.
-    static func pair(_ pair: (from: UInt16, to: UInt16), using sources: InputSources?) -> String {
-        func short(_ code: UInt16) -> String { code == 49 ? "␣" : label(code, using: sources) }
+    static func pair(_ pair: (from: UInt16, to: UInt16), using sources: InputSources?, layout: String? = nil) -> String {
+        func short(_ code: UInt16) -> String { code == 49 ? "␣" : label(code, using: sources, layout: layout) }
         return "\(short(pair.from)) → \(short(pair.to))"
     }
 
