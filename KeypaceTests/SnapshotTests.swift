@@ -25,6 +25,12 @@ struct SnapshotTests {
         try render(MainWindow.detail(for: page, tracker: tracker), size: CGSize(width: 780, height: 900), name: "page-\(page)")
     }
 
+    @Test func `overview today`() throws {
+        UserDefaults.standard.set(Period.today.rawValue, forKey: "overviewPeriod")
+        defer { UserDefaults.standard.removeObject(forKey: "overviewPeriod") }
+        try render(MainWindow.detail(for: .overview, tracker: tracker), size: CGSize(width: 780, height: 900), name: "page-overview-today")
+    }
+
     @Test func `live metrics`() throws {
         try render(LiveMetrics(tracker: tracker), size: CGSize(width: 220, height: 100), name: "live-metrics")
     }

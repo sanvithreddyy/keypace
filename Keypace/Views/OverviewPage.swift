@@ -115,17 +115,27 @@ private struct SpeedChart: View {
     var body: some View {
         let current = points(data.sessions, start: data.interval?.start, series: "This period")
         let previous = data.previousSessions.map { points($0, start: data.period.previous(now: .now, calendar: .current)?.start, series: "Previous") } ?? []
+        let values = (previous + current).map(\.wpm)
+        // Whole tens with some room, so a single value or a flat day still gets a readable scale.
+        let low = ((values.min() ?? 50) - 5) / 10
+        let high = ((values.max() ?? 80) + 5) / 10
         Chart(previous + current) { point in
             LineMark(x: .value("Position", point.index), y: .value("WPM", point.wpm), series: .value("Series", point.series))
                 .interpolationMethod(.monotone)
                 .foregroundStyle(point.series == "Previous" ? Color.secondary.opacity(0.5) : Color.primary)
                 .lineStyle(StrokeStyle(lineWidth: point.series == "Previous" ? 1.2 : 1.6))
+            if point.series != "Previous" {
+                // Dots keep a lone hour or day visible, where a line has nothing to join.
+                PointMark(x: .value("Position", point.index), y: .value("WPM", point.wpm))
+                    .symbolSize(18)
+                    .foregroundStyle(Color.primary)
+            }
         }
-        .chartYScale(domain: .automatic(includesZero: false))
+        .chartYScale(domain: low.rounded(.down) * 10...high.rounded(.up) * 10)
         .chartYAxis {
-            AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(.quaternary)
-                AxisValueLabel()
+                AxisValueLabel { Text("\(Int(value.as(Double.self) ?? 0))") }
             }
         }
         .chartXAxis {
