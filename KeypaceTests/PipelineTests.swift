@@ -157,4 +157,13 @@ struct PipelineTests {
         #expect(session.deletions == 5)
         #expect(session.totals.netCharacters == 12)
     }
+
+    @Test func `live speed clears when capture stops`() throws {
+        let tracker = try makeTracker(clock: clock)
+        Typist(tracker: tracker, clock: clock).type("the quick brown fox", interval: 0.15)
+        #expect(tracker.liveWPM != nil)
+        tracker.captureStopped()
+        #expect(tracker.liveWPM == nil)
+        #expect(tracker.allSessions().count == 1)
+    }
 }

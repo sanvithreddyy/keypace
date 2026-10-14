@@ -20,6 +20,7 @@ struct ObservedKey {
 final class KeyboardMonitor {
     private var tap: CFMachPort?
     private var onKey: (ObservedKey) -> Void = { _ in }
+    private var onClick: () -> Void = {}
 
     static var hasPermission: Bool { CGPreflightListenEventAccess() }
 
@@ -29,10 +30,13 @@ final class KeyboardMonitor {
     var isRunning: Bool { tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
 
     /// Returns false when the tap can't be created, which means permission is missing.
-    func start(onKey: @escaping (ObservedKey) -> Void) -> Bool {
+    /// - Parameter onClick: a mouse button went down, which may have moved the text cursor.
+    func start(onKey: @escaping (ObservedKey) -> Void, onClick: @escaping () -> Void) -> Bool {
         guard tap == nil else { return true }
         self.onKey = onKey
-        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+        self.onClick = onClick
+        let types: [CGEventType] = [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+        let mask = types.reduce(CGEventMask(0)) { $0 | CGEventMask(1 << $1.rawValue) }
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .tailAppendEventTap,
@@ -64,6 +68,8 @@ final class KeyboardMonitor {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+            onClick()
         case .keyDown:
             guard let nsEvent = NSEvent(cgEvent: event) else { return }
             let flags = event.flags

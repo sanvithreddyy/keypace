@@ -262,7 +262,7 @@ final class LiveTracker {
     // MARK: Capture
 
     private func startCapture() {
-        if monitor.start(onKey: { [weak self] in self?.record($0) }) {
+        if startMonitor() {
             status = .running
             devices?.start()
         } else {
@@ -278,16 +278,27 @@ final class LiveTracker {
         case .running where !KeyboardMonitor.hasPermission:
             // Input Monitoring was turned off while running.
             monitor.stop()
-            endSession()
+            captureStopped()
             status = .needsPermission
         case .running:
             tick()
         case .needsPermission:
-            if monitor.start(onKey: { [weak self] in self?.record($0) }) {
+            if startMonitor() {
                 status = .running
                 devices?.start()
             }
         }
+    }
+
+    private func startMonitor() -> Bool {
+        monitor.start(onKey: { [weak self] in self?.record($0) }, onClick: { [weak self] in self?.engine.cursorMoved() })
+    }
+
+    /// Saves what's open and clears live speed when capture stops; nothing can update them until it restarts.
+    func captureStopped() {
+        endSession()
+        engine.resetLive()
+        liveWPM = nil
     }
 
     private func record(_ key: ObservedKey) {
