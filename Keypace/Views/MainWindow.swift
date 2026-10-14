@@ -208,7 +208,8 @@ private struct SpeedChart: View {
         }
         .chartXAxis {
             AxisMarks(values: [0, max(slots - 1, 0)]) { value in
-                AxisValueLabel { Text(label(for: value.as(Int.self) ?? 0)) }
+                // Anchor the end labels inward so neither is clipped at the edge.
+                AxisValueLabel(anchor: value.index == 0 ? .topLeading : .topTrailing) { Text(label(for: value.as(Int.self) ?? 0)) }
             }
         }
         .chartXScale(domain: 0...max(slots - 1, 1))

@@ -70,8 +70,11 @@ struct Dropdown: View {
             var parts: [Text] = []
             if let wpm = data.totals.wpm, let previous = data.previousTotals?.wpm {
                 let change = wpm - previous
-                parts.append(Text(Format.signed(change)).foregroundStyle(change >= 0.5 ? .green : change <= -0.5 ? .red : .secondary)
-                    + Text(" \(data.period.comparison)"))
+                if abs(change) < 0.5 {
+                    parts.append(Text("same as \(data.period.comparisonNoun)"))
+                } else {
+                    parts.append(Text(Format.signed(change)).foregroundStyle(change > 0 ? .green : .red) + Text(" \(data.period.comparison)"))
+                }
             }
             if let live { parts.append(Text("now \(Format.wpm(live))")) }
             guard let first = parts.first else { return Text(data.sessions.isEmpty ? "No typing yet" : " ") }
@@ -90,17 +93,19 @@ struct Dropdown: View {
                     LineMark(x: .value("Time", point.date), y: .value("WPM", point.wpm))
                         .interpolationMethod(.monotone)
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.primary)
                     if point.date == points.last?.date {
                         PointMark(x: .value("Time", point.date), y: .value("WPM", point.wpm))
                             .symbolSize(20)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color.primary)
                     }
                 }
                 .chartYAxis(.hidden)
                 .chartXAxis {
-                    AxisMarks(values: [points.first!.date, points.last!.date]) { _ in
-                        AxisValueLabel(format: data.period == .today ? .dateTime.hour() : .dateTime.month(.abbreviated).day())
+                    AxisMarks(values: [points.first!.date, points.last!.date]) { value in
+                        // Anchor the end labels inward so neither is clipped at the edge.
+                        AxisValueLabel(format: data.period == .today ? .dateTime.hour() : .dateTime.month(.abbreviated).day(),
+                                       anchor: value.index == 0 ? .topLeading : .topTrailing)
                     }
                 }
                 .chartYScale(domain: .automatic(includesZero: false))

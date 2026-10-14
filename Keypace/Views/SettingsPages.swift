@@ -18,12 +18,12 @@ struct GeneralSettingsPage: View {
                 }
             }
             Section("Data") {
-                LabeledContent("Stored on this Mac only") {
-                    Button("Export CSV…", action: export)
+                LabeledContent("Export every session as CSV") {
+                    Button("Export…", action: export)
                 }
                 if let exportError { Text(exportError).foregroundStyle(.red) }
-                LabeledContent("Every recorded session") {
-                    Button("Delete All History…", role: .destructive) { confirmingReset = true }
+                LabeledContent("Delete all typing history") {
+                    Button("Delete…", role: .destructive) { confirmingReset = true }
                 }
             }
         }

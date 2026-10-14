@@ -30,6 +30,16 @@ extension Period {
         }
     }
 
+    /// The previous period as a noun: "yesterday", "the previous 7 days".
+    var comparisonNoun: String {
+        switch self {
+        case .today: "yesterday"
+        case .week: "the previous 7 days"
+        case .month: "the previous 30 days"
+        case .allTime: ""
+        }
+    }
+
     /// How the comparison reads: "vs yesterday", "vs previous 7 days".
     var comparison: String {
         switch self {
