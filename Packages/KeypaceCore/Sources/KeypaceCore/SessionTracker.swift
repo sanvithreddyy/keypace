@@ -5,6 +5,8 @@
 /// with arrows or shortcuts doesn't dilute speed. Held-key character repeats are ignored;
 /// backspace repeats each delete a character, so they count as backspaces.
 ///
+/// Per-key counts cover characters and Delete presses only; shortcuts and navigation keys
+/// aren't counted per key, so a key's correction rate is over the characters it typed.
 /// Each backspace is charged to the key that typed the character it deletes. Key-pair
 /// timings cover consecutive character presses less than `maximumPairGap` apart; a
 /// backspace or any other key breaks the chain.
@@ -33,12 +35,12 @@ public struct SessionTracker: Sendable {
         }
 
         switch (press.kind, press.isRepeat) {
-        case (.character, true), (.other, true):
+        case (.character, true):
             break
+        case (.other, true):
+            lastCharacter = nil
         case (.other, false):
-            guard current != nil else { break }
             current?.keystrokes += 1
-            current?.keys[press.keyCode, default: KeyCount()].presses += 1
             lastCharacter = nil
         case (.character, false):
             var session = open(in: context, at: press.time)

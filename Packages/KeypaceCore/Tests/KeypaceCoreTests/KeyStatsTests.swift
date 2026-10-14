@@ -85,3 +85,34 @@ struct LongSessionTests {
         #expect(session.keys[0]?.corrections == 300)
     }
 }
+
+struct ShortcutTests {
+    @Test func `shortcuts don't dilute a key's correction rate`() throws {
+        var tracker = SessionTracker(minimumCharacters: 1)
+        let app = TypingContext(appID: "a")
+        var time = 0.0
+        func press(_ kind: KeyPress.Kind, _ code: UInt16, repeat isRepeat: Bool = false) {
+            time += 0.1
+            _ = tracker.record(KeyPress(time: time, keyCode: code, kind: kind, isRepeat: isRepeat), in: app)
+        }
+        for _ in 0..<20 { press(.character, 0) }
+        for _ in 0..<10 { press(.backspace, 51) }
+        for _ in 0..<20 { press(.other, 0) } // Command-A
+        let ended = tracker.end()
+        let session = try #require(ended)
+        #expect(session.keys[0] == KeyCount(presses: 20, corrections: 10))
+        #expect(session.keys[0]?.correctionRate == 0.5)
+        #expect(session.keystrokes == 50)
+    }
+
+    @Test func `a held navigation key breaks the pair chain`() throws {
+        var tracker = SessionTracker(minimumCharacters: 1)
+        let app = TypingContext(appID: "a")
+        _ = tracker.record(KeyPress(time: 0.0, keyCode: 11, kind: .character), in: app) // B
+        _ = tracker.record(KeyPress(time: 0.1, keyCode: 124, kind: .other, isRepeat: true), in: app) // held →
+        _ = tracker.record(KeyPress(time: 0.2, keyCode: 8, kind: .character), in: app) // C
+        let ended = tracker.end()
+        let session = try #require(ended)
+        #expect(session.pairs.isEmpty)
+    }
+}

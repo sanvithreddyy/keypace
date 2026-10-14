@@ -66,7 +66,7 @@ public struct TypingSession: Sendable, Equatable {
     public var characters = 0
     public var backspaces = 0
     public var keystrokes = 0
-    /// Per physical key: presses, and characters later deleted.
+    /// Per physical key: characters typed (or Delete presses), and characters later deleted.
     public var keys: [UInt16: KeyCount] = [:]
     /// Time between consecutive character presses, per key pair.
     public var pairs: [KeyPair: PairTiming] = [:]

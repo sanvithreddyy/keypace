@@ -1,4 +1,4 @@
-/// Presses of one physical key, and how many of the characters it typed were deleted.
+/// Characters typed with one physical key (or Delete presses), and how many of those characters were deleted.
 public struct KeyCount: Sendable, Equatable {
     public var presses = 0
     public var corrections = 0
