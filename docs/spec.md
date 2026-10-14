@@ -28,17 +28,19 @@ patterns in the background and keeps everything on this Mac.
      secure input.
 2. Sessions and metrics
    - A session ends after N seconds without a keystroke (default 5) or when
-     the frontmost app changes.
+     the frontmost app, keyboard or layout changes.
    - Sessions shorter than the minimum size (default 10 characters) are not saved.
    - WPM = net characters / 5 per minute; CPM; KPM (keystrokes per minute,
      for IME languages).
    - Net characters = characters − backspaces. The correction rate is
      backspaces per character typed, and is labeled as corrections, not accuracy.
    - Held character keys count once; a held Delete counts every deletion.
-   - Per-key error: a backspace is charged to the key typed before it.
-3. Synthetic-input filter: excludes paste, snippet expanders, AI autocomplete
-   and scripted input, using hardware-event matching, the posting process,
-   event source state, impossible inter-key intervals and Cmd+V.
+   - Per-key corrections: each backspace is charged to the key whose
+     character it deletes.
+3. Synthetic-input filter: keystrokes must come from the HID system event
+   source with no posting process; strict mode also drops presses under 5 ms
+   apart. Filtered presses are counted, not recorded as typing. Paste and AI
+   autocomplete insert text without keystrokes, so they never count.
 4. Menu-bar dropdown: the period's speed with its change against the previous
    period, live speed while typing, speed through the day, corrections, typing
    time and top apps. Footer: Open Keypace, Quit.
@@ -48,7 +50,7 @@ patterns in the background and keeps everything on this Mac.
 6. Statistics: any range including all-time, calendar of daily speed,
    monthly volume, filters by app, keyboard and layout.
 7. Apps: typing time, share, speed, change and corrections per app.
-8. Keys: keyboard heatmap (usage and errors) from the real Mac layout,
+8. Keys: keyboard heatmap (usage and corrections) from the Mac ANSI layout,
    per-key error rate, finger load against touch-typing assignments, travel,
    home-row share, hand alternation, same-finger pairs, slowest and fastest
    key pairs. Finger stats are labeled as assumed assignments.
@@ -56,7 +58,8 @@ patterns in the background and keeps everything on this Mac.
    current and longest daily streak.
 10. Keyboards and layouts: auto-detected keyboards and input sources, compared
     side by side.
-11. Live Metrics: floating always-on-top panel with speed as you type.
+11. Live Metrics: floating always-on-top window with speed as you type,
+    opened from the main window's toolbar.
 12. Settings: inactivity timeout, minimum session size, tracking mode (every
     app except a list, or only a list), menu-bar format, launch at login.
 13. Data: CSV export, delete one app's history, delete everything.

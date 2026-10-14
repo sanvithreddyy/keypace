@@ -2,24 +2,23 @@
 
 ## Done
 
-- Listen-only keyboard capture and Input Monitoring prompt
-- Session engine: inactivity split, WPM/CPM/KPM, corrections
-- Local session history (GRDB), statistics by app, hour, weekday and day,
-  streaks, CSV export
-- Menu-bar number and dropdown
-- Main window: Overview, Apps, General and Tracking settings
-
-## Next
-
-- Statistics page: custom ranges, calendar of daily speed, monthly volume
-- Keys: per-key counts and errors, key-pair timings, keyboard heatmap,
-  finger load, travel, hand alternation
-- Keyboards and layouts: device and input-source detection and comparison
-- Synthetic-input filter with a strength setting
-- Records and streak insights
-- Live Metrics panel, menu-bar formats, launch at login
+- Listen-only keyboard capture, Input Monitoring prompt, recovery when the
+  permission is revoked
+- Session engine: inactivity split, WPM/CPM/KPM, corrections, per-key
+  corrections, key-pair timings
+- Keyboard attribution through IOHID and layout attribution through input
+  sources
+- Filter for keystrokes posted by other software, with a strength setting
+- Local history (GRDB): sessions plus daily key, pair, device and filtered-input
+  statistics
+- Menu-bar number with format options, dropdown with weak spots, Live Metrics
+  window, open at login
+- Main window: Overview, Statistics, Apps, Keys, Records, Keyboards, Layouts,
+  General and Tracking settings
+- Pipeline and screen tests with sample history
 
 ## Later
 
+- ISO keyboard drawing on the Keys page (ISO keys are counted; the drawing is ANSI)
 - Pause tracking for a set time
 - Widgets and Shortcuts actions
