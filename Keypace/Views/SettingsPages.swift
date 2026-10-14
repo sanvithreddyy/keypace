@@ -1,3 +1,4 @@
+import ServiceManagement
 import SwiftUI
 import KeypaceCore
 import UniformTypeIdentifiers
@@ -6,6 +7,30 @@ struct GeneralSettingsPage: View {
     @Bindable var tracker: LiveTracker
     @State private var confirmingReset = false
     @State private var exportError: String?
+    @State private var loginError: String?
+    @AppStorage("menuBarFormat") private var menuBarFormat = MenuBarFormat.withUnit
+
+    private var filterDescription: String {
+        switch tracker.syntheticStrength {
+        case .off: "Every keystroke counts, including ones sent by text expanders and automation."
+        case .normal: "Keystrokes sent by other apps, such as text expanders and automation, don't count toward your speed."
+        case .strict: "Also ignores keystrokes that arrive faster than a person can type."
+        }
+    }
+
+    private var launchAtLogin: Binding<Bool> {
+        Binding(
+            get: { SMAppService.mainApp.status == .enabled },
+            set: { enabled in
+                do {
+                    if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+                    loginError = nil
+                } catch {
+                    loginError = "Couldn't change: \(error.localizedDescription)"
+                }
+            }
+        )
+    }
 
     var body: some View {
         Form {
@@ -16,6 +41,22 @@ struct GeneralSettingsPage: View {
                 Stepper(value: $tracker.minimumCharacters, in: 1...200, step: 5) {
                     LabeledContent("Save sessions with at least", value: "\(tracker.minimumCharacters) characters")
                 }
+            }
+            Section("Menu bar") {
+                Picker("Show", selection: $menuBarFormat) {
+                    ForEach(MenuBarFormat.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                Toggle("Open at login", isOn: launchAtLogin)
+                if let loginError { Text(loginError).foregroundStyle(.red) }
+            }
+            Section {
+                Picker("Ignore input from other software", selection: $tracker.syntheticStrength) {
+                    Text("Off").tag(SyntheticFilter.Strength.off)
+                    Text("Standard").tag(SyntheticFilter.Strength.normal)
+                    Text("Strict").tag(SyntheticFilter.Strength.strict)
+                }
+            } footer: {
+                Text(filterDescription).font(.caption).foregroundStyle(.secondary)
             }
             Section("Data") {
                 LabeledContent("Export every session as CSV") {

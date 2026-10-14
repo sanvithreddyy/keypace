@@ -24,12 +24,13 @@ struct KeypaceApp: App {
 /// Live session speed while typing, otherwise today's speed.
 private struct MenuBarLabel: View {
     let tracker: LiveTracker
+    @AppStorage("menuBarFormat") private var format = MenuBarFormat.withUnit
 
     var body: some View {
         if tracker.status == .needsPermission {
             Image(systemName: "keyboard.badge.exclamationmark")
-        } else if let wpm = wpm {
-            Text("\(Format.wpm(wpm)) wpm").monospacedDigit()
+        } else if format != .icon, let wpm = wpm {
+            Text(format == .withUnit ? "\(Format.wpm(wpm)) wpm" : Format.wpm(wpm)).monospacedDigit()
         } else {
             Image(systemName: "keyboard")
         }
