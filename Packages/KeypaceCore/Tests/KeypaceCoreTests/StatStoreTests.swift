@@ -74,6 +74,8 @@ struct StatStoreTests {
         try store.addSynthetic(count: 12, appID: "com.apple.Notes", day: "2026-10-12")
         try store.addSynthetic(count: 8, appID: "com.apple.Notes", day: "2026-10-12")
         try store.addSynthetic(count: 5, appID: "com.apple.Notes", day: "2026-10-13")
-        #expect(try store.syntheticCount(in: DateInterval(start: monday, duration: 86_400), calendar: utc) == 20)
+        try store.addSynthetic(count: 7, appID: "com.apple.mail", day: "2026-10-12")
+        #expect(try store.syntheticCount(in: DateInterval(start: monday, duration: 86_400), calendar: utc) == 27)
+        #expect(try store.syntheticCount(in: DateInterval(start: monday, duration: 86_400), calendar: utc, appID: "com.apple.mail") == 7)
     }
 }

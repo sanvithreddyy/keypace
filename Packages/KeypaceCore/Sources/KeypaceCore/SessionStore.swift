@@ -274,9 +274,9 @@ public struct SessionStore: Sendable {
         }
     }
 
-    /// Key presses filtered out as synthetic on the days in the interval.
-    public func syntheticCount(in interval: DateInterval, calendar: Calendar) throws -> Int {
-        let (clause, arguments) = StatFilter().sql(interval: interval, calendar: calendar)
+    /// Key presses filtered out as synthetic on the days in the interval, optionally for one app.
+    public func syntheticCount(in interval: DateInterval, calendar: Calendar, appID: String? = nil) throws -> Int {
+        let (clause, arguments) = StatFilter(appID: appID).sql(interval: interval, calendar: calendar)
         return try db.read { db in
             try Int.fetchOne(db, sql: "SELECT COALESCE(SUM(count), 0) FROM syntheticStat WHERE \(clause)", arguments: arguments) ?? 0
         }
