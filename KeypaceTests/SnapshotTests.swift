@@ -24,8 +24,15 @@ struct SnapshotTests {
         try render(MainWindow.detail(for: page, tracker: tracker), size: CGSize(width: 780, height: 900), name: "page-\(page)")
     }
 
-    @Test func dropdown() throws {
-        try render(Dropdown(tracker: tracker), size: CGSize(width: 340, height: 480), name: "dropdown")
+    @Test func `live metrics`() throws {
+        try render(LiveMetrics(tracker: tracker), size: CGSize(width: 220, height: 100), name: "live-metrics")
+    }
+
+    @Test(arguments: [Period.today, .week])
+    func dropdown(period: Period) throws {
+        UserDefaults.standard.set(period.rawValue, forKey: "dropdownPeriod")
+        defer { UserDefaults.standard.removeObject(forKey: "dropdownPeriod") }
+        try render(Dropdown(tracker: tracker), size: CGSize(width: 340, height: 640), name: "dropdown-\(period)")
     }
 
     private func render(_ view: some View, size: CGSize, name: String) throws {

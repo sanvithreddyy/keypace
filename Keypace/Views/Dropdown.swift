@@ -22,6 +22,9 @@ struct Dropdown: View {
                 }
                 .padding(.top, 12)
                 TopApps(sessions: data.sessions).padding(.top, 16)
+                if let interval = data.interval {
+                    WeakSpots(keys: tracker.keyStats(in: interval), pairs: tracker.pairStats(in: interval), sources: tracker.inputSources)
+                }
             }
             if let error = tracker.storageError {
                 Text("Not saving history: \(error)").font(.caption).foregroundStyle(.red).padding(.top, 12)
@@ -178,5 +181,49 @@ private struct PermissionPrompt: View {
                 }
             }
         }
+    }
+}
+
+/// The most corrected keys and slowest key pairs as gray chips, once there's enough typing to judge.
+private struct WeakSpots: View {
+    let keys: [UInt16: KeyCount]
+    let pairs: [KeyPair: PairTiming]
+    let sources: InputSources?
+
+    var body: some View {
+        let corrected = keys.filter { $0.value.presses >= KeyboardHeatmap.minimumPresses && $0.value.corrections > 0 && $0.key != 49 && $0.key != 51 }
+            .sorted { ($0.value.correctionRate ?? 0) > ($1.value.correctionRate ?? 0) }
+            .prefix(4)
+        let slow = pairs.filter { $0.value.count >= 5 }
+            .sorted { ($0.value.averageMilliseconds ?? 0) > ($1.value.averageMilliseconds ?? 0) }
+            .prefix(3)
+        if !corrected.isEmpty {
+            chips("Most corrected keys", corrected.map { (KeyLabels.label($0.key, using: sources), Format.percent($0.value.correctionRate, decimals: 0)) })
+        }
+        if !slow.isEmpty {
+            chips("Slowest pairs", slow.map {
+                (KeyLabels.pair(($0.key.from, $0.key.to), using: sources).replacingOccurrences(of: " ", with: ""), "\(Int(($0.value.averageMilliseconds ?? 0).rounded())) ms")
+            })
+        }
+    }
+
+    private func chips(_ title: String, _ items: [(String, String)]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                ForEach(items, id: \.0) { label, value in
+                    HStack(spacing: 4) {
+                        Text(label).font(.system(.callout, design: .monospaced))
+                        Text(value).font(.caption).foregroundStyle(.secondary)
+                    }
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(.quaternary.opacity(0.6), in: .rect(cornerRadius: 6))
+                }
+            }
+        }
+        .padding(.top, 16)
     }
 }
