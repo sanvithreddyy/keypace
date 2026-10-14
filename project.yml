@@ -22,6 +22,8 @@ targets:
       Release: Config/Signing.xcconfig
     dependencies:
       - package: KeypaceCore
+    scheme:
+      testTargets: [KeypaceTests]
     info:
       path: Keypace/Info.plist
       properties:
@@ -34,3 +36,20 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sanvith.keypace
         MARKETING_VERSION: "0.1"
+  KeypaceTests:
+    type: bundle.unit-test
+    platform: macOS
+    # Compiles the app's code directly, so tests never launch the menu-bar app.
+    sources:
+      - KeypaceTests
+      - path: Keypace
+        excludes: [KeypaceApp.swift, Info.plist]
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
+    dependencies:
+      - package: KeypaceCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.sanvith.keypace.tests
