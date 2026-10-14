@@ -2,9 +2,60 @@ import Testing
 @testable import KeypaceCore
 
 struct LiveSpeedTests {
+    @Test func `live speed leaves out the same thinking pauses as saved speed`() throws {
+        var tracker = SessionTracker()
+        let context = TypingContext(appID: "notes")
+        for start in [0.0, 3.8] {
+            for i in 0..<10 {
+                _ = tracker.record(KeyPress(time: start + Double(i) * 0.2, keyCode: 0, kind: .character), in: context)
+            }
+        }
+        let live = try #require(tracker.live.wordsPerMinute(at: 5.6))
+        let ended = tracker.end()
+        let saved = try #require(ended?.totals.wpm)
+        #expect(abs(live - 60) < 1e-9)
+        #expect(abs(saved - 60) < 1e-9)
+    }
+
+    @Test func `live corrections after a pause still reduce net speed`() throws {
+        var tracker = SessionTracker()
+        let context = TypingContext(appID: "notes")
+        for i in 0..<12 {
+            _ = tracker.record(KeyPress(time: Double(i) * 0.2, keyCode: 0, kind: .character), in: context)
+        }
+        for time in [4.2, 4.4] {
+            _ = tracker.record(KeyPress(time: time, keyCode: 51, kind: .backspace), in: context)
+        }
+        let live = try #require(tracker.live.wordsPerMinute(at: 4.4))
+        // The first character marks the window start; 11 characters minus 2 corrections over 13 typing gaps.
+        let expected = 9.0 * 12 / 2.6
+        #expect(abs(live - expected) < 1e-9)
+        let ended = tracker.end()
+        #expect(ended?.characters == 12)
+        #expect(ended?.deletions == 2)
+        #expect(abs(try #require(ended?.activeDuration) - 2.8) < 1e-9)
+    }
+
+    @Test func `live speed reuses the learned cutoff for slower typing`() throws {
+        var tracker = SessionTracker()
+        let context = TypingContext(appID: "notes")
+        for i in 0..<40 {
+            _ = tracker.record(KeyPress(time: Double(i) * 0.3, keyCode: 0, kind: .character), in: context)
+        }
+        for i in 0..<10 {
+            _ = tracker.record(KeyPress(time: 12.6 + Double(i) * 0.3, keyCode: 0, kind: .character), in: context)
+        }
+        let live = try #require(tracker.live.wordsPerMinute(at: 15.3))
+        // The learned 1.2-second cutoff retains the 0.9-second gap; the 8-second window starts at 7.5.
+        #expect(abs(live - 24.0 * 12 / 7.8) < 1e-9)
+    }
+
     private func typed(_ times: [Double], deletions: [Double: Int] = [:]) -> LiveSpeed {
         var live = LiveSpeed()
-        for t in times { live.record(at: t, characters: deletions[t].map { -$0 } ?? 1) }
+        for (index, t) in times.enumerated() {
+            live.record(at: t, characters: deletions[t].map { -$0 } ?? 1,
+                        typingSeconds: index > 0 ? t - times[index - 1] : 0)
+        }
         return live
     }
 

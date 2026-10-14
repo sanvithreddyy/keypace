@@ -54,9 +54,9 @@ public struct SessionTracker: Sendable {
             session.characters += 1
             session.keystrokes += 1
             session.keys[press.keyCode, default: KeyCount()].presses += 1
-            addTypingTime(to: &session, press: press, pairs: true)
+            let typingSeconds = addTypingTime(to: &session, press: press, pairs: true)
             typedKeys.append((press.keyCode, true))
-            live.record(at: press.time, characters: 1)
+            live.record(at: press.time, characters: 1, typingSeconds: typingSeconds)
             lastTyping = (press.keyCode, press.time, true)
             current = session
         case .backspace, .deleteWord, .deleteLine:
@@ -81,8 +81,8 @@ public struct SessionTracker: Sendable {
                 session.keys[press.keyCode, default: KeyCount()].presses += 1
             }
             for key in removed { session.keys[key, default: KeyCount()].corrections += 1 }
-            addTypingTime(to: &session, press: press, pairs: false)
-            live.record(at: press.time, characters: -removed.count)
+            let typingSeconds = addTypingTime(to: &session, press: press, pairs: false)
+            live.record(at: press.time, characters: -removed.count, typingSeconds: typingSeconds)
             lastTyping = (press.keyCode, press.time, false)
             current = session
         }
@@ -127,24 +127,28 @@ public struct SessionTracker: Sendable {
     }
 
     /// Adds the gap before this press to the session's typing time if it was typing, or one usual gap
-    /// if the press starts a new burst.
-    private mutating func addTypingTime(to session: inout TypingSession, press: KeyPress, pairs: Bool) {
+    /// if the press starts a new burst. Returns that time so live speed uses the same measurement.
+    private mutating func addTypingTime(to session: inout TypingSession, press: KeyPress, pairs: Bool) -> Double {
         guard let last = lastTyping else {
-            session.activeDuration += gaps.typicalGap
-            return
+            let duration = gaps.typicalGap
+            session.activeDuration += duration
+            return duration
         }
         let gap = press.time - last.time
+        let duration: Double
         if press.isRepeat {
             // Held Delete fires at the key-repeat rate; that's typing time but not a typing gap to learn from.
-            session.activeDuration += gap <= gaps.config.ceiling ? gap : gaps.typicalGap
+            duration = gap <= gaps.config.ceiling ? gap : gaps.typicalGap
         } else if gaps.accepts(gap, from: last.keyCode, to: press.keyCode) {
-            session.activeDuration += gap
+            duration = gap
             if pairs, last.isCharacter {
                 session.pairs[KeyPair(from: last.keyCode, to: press.keyCode), default: PairTiming()] += PairTiming(count: 1, totalMilliseconds: gap * 1000)
             }
         } else {
-            session.activeDuration += gaps.typicalGap
+            duration = gaps.typicalGap
         }
+        session.activeDuration += duration
+        return duration
     }
 
     /// Removes the characters a delete removes from the session's typed keys and returns the counted ones.

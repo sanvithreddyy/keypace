@@ -40,7 +40,8 @@ patterns in the background and keeps everything on this Mac.
    - Held character keys count once; a held Delete counts every deletion.
    - Per-key corrections: each deleted character is charged to the key that
      typed it.
-   - Live speed: the last 8 s of typing, cleared 2 s after typing stops.
+   - Live speed: events in the last 8 s, using the same pause-filtered typing time
+     as saved sessions, cleared 2 s after typing stops.
 3. Synthetic-input filter: keystrokes must come from the HID system event
    source with no posting process; strict mode also drops presses under 5 ms
    apart. Filtered presses are counted, not recorded as typing. Paste and AI

@@ -83,8 +83,8 @@ timings cover consecutive characters whose gap counted as typing. Finger
 statistics assume touch-typing finger assignments. Shortcuts and navigation
 keys count as keystrokes but not per key.
 
-The live number covers the last 8 seconds of typing and clears 2 seconds after
-you stop.
+The live number covers events in the last 8 seconds, using the same pause-filtered
+typing time as saved sessions, and clears 2 seconds after you stop.
 
 Sessions saved before typing time was measured keep their original numbers:
 elapsed time and every backspace.

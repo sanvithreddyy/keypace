@@ -158,6 +158,22 @@ struct PipelineTests {
         #expect(session.totals.netCharacters == 12)
     }
 
+    @Test func `live and saved speed both leave out thinking pauses`() throws {
+        let tracker = try makeTracker(clock: clock)
+        let typist = Typist(tracker: tracker, clock: clock)
+        typist.type("abcdefghij")
+        clock.advance(1.8) // With the next key's interval, a 2-second thinking pause.
+        typist.type("abcdefghij")
+        let live = try #require(tracker.liveWPM)
+        #expect(abs(live - 60) < 1e-6)
+        typist.pause()
+        #expect(tracker.liveWPM == nil)
+        let saved = try #require(tracker.allSessions().first)
+        #expect(saved.characters == 20)
+        #expect(saved.deletions == 0)
+        #expect(abs(try #require(saved.totals.wpm) - 60) < 1e-6)
+    }
+
     @Test func `live speed clears when capture stops`() throws {
         let tracker = try makeTracker(clock: clock)
         Typist(tracker: tracker, clock: clock).type("the quick brown fox", interval: 0.15)
