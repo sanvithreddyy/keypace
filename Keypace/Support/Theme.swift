@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// The menu-bar panel's solid dark palette, so it reads the same over any wallpaper.
+/// The menu-bar panel's palette: the system's translucent material darkened with a neutral tint, and
+/// cards washed lighter on top, so it reads dark over any wallpaper without a color cast.
 enum Theme {
-    /// #252D38
-    static let panel = Color(red: 0x25 / 255, green: 0x2D / 255, blue: 0x38 / 255)
-    /// #393C41
-    static let surface = Color(red: 0x39 / 255, green: 0x3C / 255, blue: 0x41 / 255)
-    /// A step lighter than `surface`, for tiles and chips sitting on it.
+    /// Laid over the panel's material.
+    static let panelTint = Color.black.opacity(0.32)
+    /// Cards and the tab bar.
+    static let surface = Color.white.opacity(0.07)
+    /// Tiles and chips sitting on a card.
     static let raised = Color.white.opacity(0.06)
 }

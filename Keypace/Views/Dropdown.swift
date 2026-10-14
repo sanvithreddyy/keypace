@@ -47,7 +47,7 @@ struct Dropdown: View {
         }
         .padding(14)
         .monospacedDigit()
-        .background(Theme.panel)
+        .background(Theme.panelTint)
         .environment(\.colorScheme, .dark)
     }
 
@@ -78,7 +78,7 @@ private struct TabBar: View {
             }
         }
         .padding(4)
-        .background(Theme.surface.opacity(0.7), in: .rect(cornerRadius: 11))
+        .background(Theme.surface, in: .rect(cornerRadius: 11))
     }
 }
 
@@ -124,7 +124,7 @@ private struct Panel<Content: View>: View {
         VStack(alignment: .leading, spacing: spacing) { content }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.surface.opacity(0.7), in: .rect(cornerRadius: 12))
+            .background(Theme.surface, in: .rect(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.05)))
     }
 }
@@ -189,7 +189,7 @@ private struct FooterButtonStyle: ButtonStyle {
         configuration.label
             .font(.callout.weight(.medium))
             .frame(maxWidth: .infinity, minHeight: 32)
-            .background(Theme.surface.opacity(configuration.isPressed ? 0.95 : 0.6), in: .rect(cornerRadius: 9))
+            .background(Color.white.opacity(configuration.isPressed ? 0.12 : 0.05), in: .rect(cornerRadius: 9))
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.white.opacity(0.1)))
             .contentShape(.rect(cornerRadius: 9))
     }
