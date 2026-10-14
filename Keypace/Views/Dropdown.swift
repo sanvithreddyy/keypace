@@ -47,6 +47,8 @@ struct Dropdown: View {
         }
         .padding(14)
         .monospacedDigit()
+        .background(Theme.panel)
+        .environment(\.colorScheme, .dark)
     }
 
     private func openMain() {
@@ -76,7 +78,7 @@ private struct TabBar: View {
             }
         }
         .padding(4)
-        .background(.white.opacity(0.06), in: .rect(cornerRadius: 11))
+        .background(Theme.surface.opacity(0.7), in: .rect(cornerRadius: 11))
     }
 }
 
@@ -122,7 +124,8 @@ private struct Panel<Content: View>: View {
         VStack(alignment: .leading, spacing: spacing) { content }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.05), in: .rect(cornerRadius: 12))
+            .background(Theme.surface.opacity(0.7), in: .rect(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.05)))
     }
 }
 
@@ -144,7 +147,7 @@ private struct Tile: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.05), in: .rect(cornerRadius: 9))
+        .background(Theme.raised, in: .rect(cornerRadius: 9))
     }
 }
 
@@ -186,7 +189,7 @@ private struct FooterButtonStyle: ButtonStyle {
         configuration.label
             .font(.callout.weight(.medium))
             .frame(maxWidth: .infinity, minHeight: 32)
-            .background(.white.opacity(configuration.isPressed ? 0.1 : 0.04), in: .rect(cornerRadius: 9))
+            .background(Theme.surface.opacity(configuration.isPressed ? 0.95 : 0.6), in: .rect(cornerRadius: 9))
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.white.opacity(0.1)))
             .contentShape(.rect(cornerRadius: 9))
     }
@@ -341,7 +344,7 @@ private struct KeysTab: View {
                         .fixedSize()
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
-                        .background(.white.opacity(0.06), in: .rect(cornerRadius: 6))
+                        .background(Theme.raised, in: .rect(cornerRadius: 6))
                     }
                 }
             }
