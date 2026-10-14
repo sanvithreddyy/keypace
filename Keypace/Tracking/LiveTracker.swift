@@ -2,11 +2,18 @@ import AppKit
 import Observation
 import KeypaceCore
 
-/// Connects the keyboard tap to the session engine, saves finished sessions,
+/// Connects keyboard capture to the session engine, saves finished sessions,
 /// and owns the settings that change what gets recorded.
 @Observable
 final class LiveTracker {
     enum Status { case needsPermission, running }
+
+    /// Where the event came from and when, as seen by the app.
+    struct Clock {
+        var now: () -> Date = { .now }
+        /// Seconds since boot; key events use the same clock.
+        var uptime: () -> Double = { ProcessInfo.processInfo.systemUptime }
+    }
 
     private(set) var status = Status.needsPermission
     private(set) var current: TypingSession?
@@ -33,37 +40,69 @@ final class LiveTracker {
         didSet { defaults.set(try? JSONEncoder().encode(filter), forKey: Keys.filter) }
     }
 
+    var syntheticStrength: SyntheticFilter.Strength {
+        didSet {
+            synthetic.strength = syntheticStrength
+            defaults.set(syntheticStrength.rawValue, forKey: Keys.syntheticStrength)
+        }
+    }
+
     let store: SessionStore?
+    let inputSources: InputSources?
+    private let devices: KeyboardDevices?
     private var engine: SessionTracker
+    private var synthetic: SyntheticFilter
+    /// Synthetic presses not yet written, per app.
+    private var pendingSynthetic: [String: Int] = [:]
+    /// Keyboards and layouts typed on since the last save.
+    private var seenKeyboards: [String: KeyboardRecord] = [:]
+    private var seenInputSources: [String: InputSourceRecord] = [:]
     private let monitor = KeyboardMonitor()
-    private let defaults = UserDefaults.standard
-    private var idleTimer: Timer?
-    private var permissionTimer: Timer?
+    private let defaults: UserDefaults
+    private let clock: Clock
+    private var timer: Timer?
+    private var ticks = 0
 
     private enum Keys {
         static let inactivityTimeout = "inactivityTimeout"
         static let minimumCharacters = "minimumCharacters"
         static let filter = "appFilter"
+        static let syntheticStrength = "syntheticStrength"
     }
 
-    init() {
+    /// - Parameter capture: false for tests and previews: no keyboard tap, no device or layout watching.
+    init(store: SessionStore?, defaults: UserDefaults = .standard, clock: Clock = Clock(), capture: Bool = true) {
+        self.store = store
+        self.defaults = defaults
+        self.clock = clock
         let timeout = defaults.object(forKey: Keys.inactivityTimeout) as? Double ?? 5
         let minimum = defaults.object(forKey: Keys.minimumCharacters) as? Int ?? 10
+        let strength = defaults.string(forKey: Keys.syntheticStrength).flatMap(SyntheticFilter.Strength.init) ?? .normal
         inactivityTimeout = timeout
         minimumCharacters = minimum
+        syntheticStrength = strength
         filter = defaults.data(forKey: Keys.filter).flatMap { try? JSONDecoder().decode(AppFilter.self, from: $0) } ?? AppFilter()
         engine = SessionTracker(inactivityTimeout: timeout, minimumCharacters: minimum)
+        synthetic = SyntheticFilter(strength: strength)
+        devices = capture ? KeyboardDevices() : nil
+        inputSources = capture ? InputSources() : nil
+        if capture {
+            startCapture()
+            observeSleep()
+        }
+    }
 
+    /// The tracker for the running app, saving to Application Support.
+    static func live() -> LiveTracker {
         do {
             let folder = URL.applicationSupportDirectory.appending(path: "Keypace", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            store = try SessionStore(path: folder.appending(path: "typing.sqlite").path)
+            return LiveTracker(store: try SessionStore(path: folder.appending(path: "typing.sqlite").path))
         } catch {
-            store = nil
-            storageError = error.localizedDescription
+            let tracker = LiveTracker(store: nil)
+            tracker.storageError = error.localizedDescription
+            return tracker
         }
-        startIfPermitted()
-        observeSleep()
     }
 
     func requestPermission() {
@@ -87,6 +126,38 @@ final class LiveTracker {
         return attempt { try store.allSessions() } ?? []
     }
 
+    func keyStats(in interval: DateInterval, filter: StatFilter = StatFilter()) -> [UInt16: KeyCount] {
+        guard let store else { return [:] }
+        return attempt { try store.keyStats(in: interval, calendar: .current, filter: filter) } ?? [:]
+    }
+
+    func pairStats(in interval: DateInterval, filter: StatFilter = StatFilter()) -> [KeyPair: PairTiming] {
+        guard let store else { return [:] }
+        return attempt { try store.pairStats(in: interval, calendar: .current, filter: filter) } ?? [:]
+    }
+
+    func syntheticCount(in interval: DateInterval) -> Int {
+        guard let store else { return 0 }
+        return attempt { try store.syntheticCount(in: interval, calendar: .current) } ?? 0
+    }
+
+    func keyboards() -> [KeyboardRecord] {
+        guard let store else { return [] }
+        return attempt { try store.keyboards() } ?? []
+    }
+
+    var connectedKeyboardIDs: Set<String> { devices?.connectedIDs ?? [] }
+
+    func renameKeyboard(id: String, to name: String?) {
+        attempt { try store?.renameKeyboard(id: id, to: name) }
+        revision += 1
+    }
+
+    func inputSourceRecords() -> [InputSourceRecord] {
+        guard let store else { return [] }
+        return attempt { try store.inputSources() } ?? []
+    }
+
     func deleteHistory(appID: String) {
         attempt { try store?.deleteSessions(appID: appID) }
         revision += 1
@@ -95,6 +166,7 @@ final class LiveTracker {
     func deleteAllHistory() {
         engine = SessionTracker(inactivityTimeout: inactivityTimeout, minimumCharacters: minimumCharacters)
         current = nil
+        pendingSynthetic = [:]
         attempt { try store?.deleteAll() }
         revision += 1
     }
@@ -109,28 +181,16 @@ final class LiveTracker {
         }
     }
 
-    // MARK: Capture
+    // MARK: Pipeline
 
-    private func startIfPermitted() {
-        if monitor.start(onKey: { [weak self] in self?.record($0) }) {
-            status = .running
-            permissionTimer?.invalidate()
-            idleTimer = .scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.tick() }
-            }
-        } else {
-            status = .needsPermission
-            guard permissionTimer == nil else { return }
-            permissionTimer = .scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.startIfPermitted() }
-            }
-        }
-    }
-
-    private func record(_ key: ObservedKey) {
-        let appID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
+    /// Runs one key-down through the app filter, the synthetic filter and the session engine.
+    func handle(_ key: ObservedKey, appID: String, keyboard: KeyboardRecord?, inputSource: InputSourceRecord?) {
         guard filter.tracks(appID) else {
             endSession()
+            return
+        }
+        if synthetic.isSynthetic(sourceStateID: key.sourceStateID, sourceProcessID: key.sourceProcessID, time: key.time, isRepeat: key.isRepeat) {
+            pendingSynthetic[appID, default: 0] += 1
             return
         }
         let press = KeyPress(
@@ -139,25 +199,82 @@ final class LiveTracker {
             kind: KeyClassifier.kind(keyCode: key.keyCode, commandOrControl: key.commandOrControl, text: key.text),
             isRepeat: key.isRepeat
         )
-        if let closed = engine.record(press, in: TypingContext(appID: appID)) { save(closed) }
+        let context = TypingContext(appID: appID, keyboardID: keyboard?.id, inputSourceID: inputSource?.id)
+        if let closed = engine.record(press, in: context) { save(closed) }
+        if let keyboard { seenKeyboards[keyboard.id] = keyboard }
+        if let inputSource { seenInputSources[inputSource.id] = inputSource }
         current = engine.current
     }
 
-    private func tick() {
-        if let closed = engine.closeIfIdle(at: ProcessInfo.processInfo.systemUptime) { save(closed) }
+    /// Closes an idle session and writes pending counts. Runs every second while capturing.
+    func tick() {
+        if let closed = engine.closeIfIdle(at: clock.uptime()) { save(closed) }
         current = engine.current
+        ticks += 1
+        if ticks % 60 == 0 { flushSynthetic() }
     }
 
-    private func endSession() {
+    func endSession() {
         if let closed = engine.end() { save(closed) }
         current = nil
+        flushSynthetic()
     }
 
     private func save(_ session: TypingSession) {
         // Session times are seconds since boot; anchor the last press to the wall clock.
-        let end = Date.now.addingTimeInterval(session.end - ProcessInfo.processInfo.systemUptime)
-        attempt { try store?.insert(SessionRecord(session, endingAt: end)) }
+        let end = clock.now().addingTimeInterval(session.end - clock.uptime())
+        attempt { try store?.save(session, endingAt: end, calendar: .current) }
+        for keyboard in seenKeyboards.values { attempt { try store?.noteKeyboard(keyboard) } }
+        for source in seenInputSources.values { attempt { try store?.noteInputSource(source) } }
+        seenKeyboards = [:]
+        seenInputSources = [:]
+        flushSynthetic()
         revision += 1
+    }
+
+    private func flushSynthetic() {
+        guard !pendingSynthetic.isEmpty else { return }
+        let day = Day.key(clock.now(), calendar: .current)
+        for (appID, count) in pendingSynthetic {
+            attempt { try store?.addSynthetic(count: count, appID: appID, day: day) }
+        }
+        pendingSynthetic = [:]
+    }
+
+    // MARK: Capture
+
+    private func startCapture() {
+        if monitor.start(onKey: { [weak self] in self?.record($0) }) {
+            status = .running
+            devices?.start()
+        } else {
+            status = .needsPermission
+        }
+        timer = .scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.timerFired() }
+        }
+    }
+
+    private func timerFired() {
+        switch status {
+        case .running where !KeyboardMonitor.hasPermission:
+            // Input Monitoring was turned off while running.
+            monitor.stop()
+            endSession()
+            status = .needsPermission
+        case .running:
+            tick()
+        case .needsPermission:
+            if monitor.start(onKey: { [weak self] in self?.record($0) }) {
+                status = .running
+                devices?.start()
+            }
+        }
+    }
+
+    private func record(_ key: ObservedKey) {
+        let appID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
+        handle(key, appID: appID, keyboard: devices?.lastUsed, inputSource: inputSources?.current)
     }
 
     private func observeSleep() {

@@ -4,7 +4,7 @@ import KeypaceCore
 
 @main
 struct KeypaceApp: App {
-    @State private var tracker = LiveTracker()
+    @State private var tracker = LiveTracker.live()
 
     var body: some Scene {
         MenuBarExtra {
