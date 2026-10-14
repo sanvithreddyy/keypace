@@ -98,7 +98,8 @@ struct StatisticsPage: View {
                 DatePicker("From", selection: $customStart, in: ...customEnd, displayedComponents: .date)
                 DatePicker("To", selection: $customEnd, in: customStart..., displayedComponents: .date)
             }
-            if apps.count > 1 {
+            // Stays visible while an app is selected, even if the new range has only one app.
+            if apps.count > 1 || appID != nil {
                 Picker("App", selection: $appID) {
                     Text("All apps").tag(String?.none)
                     ForEach(apps, id: \.self) { Text(AppInfo.name($0)).tag(Optional($0)) }
@@ -111,8 +112,10 @@ struct StatisticsPage: View {
     }
 
     private func statRow(totals: TypingTotals, interval: DateInterval?) -> some View {
-        let synthetic = interval.map { tracker.syntheticCount(in: $0) } ?? 0
-        let filteredShare = synthetic + totals.keystrokes > 0 ? Double(synthetic) / Double(synthetic + totals.keystrokes) : 0
+        // Software-sent keystrokes have no keyboard or layout, so they can't be narrowed to one.
+        let byDevice = keyboardID != nil || inputSourceID != nil
+        let synthetic = byDevice ? nil : interval.map { tracker.syntheticCount(in: $0, appID: appID) }
+        let filteredShare = synthetic.map { $0 + totals.keystrokes > 0 ? Double($0) / Double($0 + totals.keystrokes) : 0 }
         return VStack(spacing: 0) {
             Divider()
             HStack(alignment: .top, spacing: 0) {
@@ -124,7 +127,8 @@ struct StatisticsPage: View {
                 Divider()
                 StatBlock(label: "Corrections", value: Format.percent(totals.correctionRate))
                 Divider()
-                StatBlock(label: "Filtered input", value: Format.count(synthetic), change: synthetic > 0 ? "\(Format.percent(filteredShare)) of key presses" : nil)
+                StatBlock(label: "Filtered input", value: synthetic.map(Format.count) ?? "–",
+                          change: (synthetic ?? 0) > 0 ? "\(Format.percent(filteredShare)) of key presses" : nil)
             }
             .fixedSize(horizontal: false, vertical: true)
             Divider()

@@ -144,9 +144,9 @@ final class LiveTracker {
         return attempt { try store.pairStats(in: interval, calendar: .current, filter: filter) } ?? [:]
     }
 
-    func syntheticCount(in interval: DateInterval) -> Int {
+    func syntheticCount(in interval: DateInterval, appID: String? = nil) -> Int {
         guard let store else { return 0 }
-        return attempt { try store.syntheticCount(in: interval, calendar: .current) } ?? 0
+        return attempt { try store.syntheticCount(in: interval, calendar: .current, appID: appID) } ?? 0
     }
 
     func keyboards() -> [KeyboardRecord] {
