@@ -18,10 +18,9 @@ final class InputSources {
         }
     }
 
-    /// The character a key types with no modifiers, uppercased; named keys get their name.
+    /// The character a key types with no modifiers, uppercased; empty when it types nothing visible.
     /// - Parameter inputSourceID: the layout to label with; nil for the active layout.
     func label(for keyCode: UInt16, inputSourceID: String? = nil) -> String {
-        if let named = Self.namedKeys[keyCode] { return named }
         if let cached = labels[inputSourceID]?[keyCode] { return cached }
         let layout = inputSourceID.flatMap(Self.layoutSource) ?? TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue()
         let label = layout.flatMap { Self.translate(keyCode, with: $0) }?.uppercased() ?? ""
@@ -68,11 +67,9 @@ final class InputSources {
             let status = UCKeyTranslate(layout, keyCode, UInt16(kUCKeyActionDisplay), 0, UInt32(LMGetKbdType()),
                                         OptionBits(kUCKeyTranslateNoDeadKeysBit), &deadKeys, characters.count, &length, &characters)
             guard status == noErr, length > 0 else { return nil }
-            return String(utf16CodeUnits: characters, count: length)
+            let text = String(utf16CodeUnits: characters, count: length)
+            // Tab, Return and Delete translate to control characters, which aren't labels.
+            return text.unicodeScalars.allSatisfy({ $0.properties.generalCategory != .control }) ? text : nil
         }
     }
-
-    private static let namedKeys: [UInt16: String] = [
-        36: "return", 48: "tab", 49: "space", 51: "delete", 53: "esc", 56: "shift", 57: "caps lock", 60: "shift",
-    ]
 }
