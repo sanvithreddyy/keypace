@@ -5,7 +5,7 @@ struct MainWindow: View {
     let tracker: LiveTracker
 
     enum Page: String, Hashable, CaseIterable {
-        case overview = "Overview", apps = "Apps", keys = "Keys", general = "General", tracking = "Tracking"
+        case overview = "Overview", statistics = "Statistics", apps = "Apps", keys = "Keys", general = "General", tracking = "Tracking"
     }
 
     @State private var page: Page?
@@ -19,6 +19,7 @@ struct MainWindow: View {
         NavigationSplitView {
             List(selection: $page) {
                 Text(Page.overview.rawValue).tag(Page.overview)
+                Text(Page.statistics.rawValue).tag(Page.statistics)
                 Text(Page.apps.rawValue).tag(Page.apps)
                 Text(Page.keys.rawValue).tag(Page.keys)
                 Section("Settings") {
@@ -37,6 +38,7 @@ struct MainWindow: View {
     static func detail(for page: Page, tracker: LiveTracker) -> some View {
         switch page {
         case .overview: OverviewPage(tracker: tracker)
+        case .statistics: StatisticsPage(tracker: tracker)
         case .apps: AppsPage(tracker: tracker)
         case .keys: KeysPage(tracker: tracker)
         case .general: GeneralSettingsPage(tracker: tracker)
