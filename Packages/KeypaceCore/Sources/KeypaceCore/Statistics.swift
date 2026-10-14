@@ -13,6 +13,22 @@ public enum Statistics {
             .sorted { $0.totals.duration > $1.totals.duration }
     }
 
+    /// Per keyboard, most typing time first. Sessions with no known keyboard are left out.
+    public static func byKeyboard(_ sessions: [SessionRecord]) -> [(id: String, totals: TypingTotals)] {
+        ranked(sessions, by: \.keyboardID)
+    }
+
+    /// Per input source, most typing time first. Sessions with no known input source are left out.
+    public static func byInputSource(_ sessions: [SessionRecord]) -> [(id: String, totals: TypingTotals)] {
+        ranked(sessions, by: \.inputSourceID)
+    }
+
+    private static func ranked(_ sessions: [SessionRecord], by key: (SessionRecord) -> String?) -> [(id: String, totals: TypingTotals)] {
+        grouped(sessions.filter { key($0) != nil }) { key($0)! }
+            .map { (id: $0.key, totals: $0.value) }
+            .sorted { $0.totals.duration > $1.totals.duration }
+    }
+
     /// Keyed by hour of day, 0–23.
     public static func byHourOfDay(_ sessions: [SessionRecord], calendar: Calendar) -> [Int: TypingTotals] {
         grouped(sessions) { calendar.component(.hour, from: $0.start) }

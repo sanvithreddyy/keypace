@@ -83,6 +83,18 @@ struct StatisticsTests {
         #expect(apps.first?.totals.duration == 80)
     }
 
+    @Test func `by keyboard and layout skip sessions without one`() {
+        var laptop = record(at: monday, seconds: 30)
+        laptop.keyboardID = "1452:834"
+        laptop.inputSourceID = "com.apple.keylayout.US"
+        var external = record(at: monday, seconds: 90)
+        external.keyboardID = "1133:50475"
+        let unknown = record(at: monday, seconds: 500)
+        let sessions = [laptop, external, unknown]
+        #expect(Statistics.byKeyboard(sessions).map(\.id) == ["1133:50475", "1452:834"])
+        #expect(Statistics.byInputSource(sessions).map(\.id) == ["com.apple.keylayout.US"])
+    }
+
     @Test func `hour, weekday and day use the session's start`() {
         let sessions = [
             record(at: monday.addingTimeInterval(9 * 3600 + 59 * 60)), // Mon 09:59, runs into 10:00
