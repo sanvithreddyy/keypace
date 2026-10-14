@@ -123,65 +123,57 @@ public struct SessionStore: Sendable {
                 t.primaryKey(["day", "appID"])
             }
         }
+        migrator.registerMigration("v3-per-session-stats") { db in
+            // Key and pair statistics move from daily rows to rows per session, so they group
+            // exactly like sessions in any time zone and go with their session when it's deleted.
+            try db.drop(table: "keyStat")
+            try db.drop(table: "pairStat")
+            try db.drop(table: "syntheticStat")
+            try db.create(table: "sessionKey") { t in
+                t.belongsTo("session", onDelete: .cascade).notNull()
+                t.column("keyCode", .integer).notNull()
+                t.column("presses", .integer).notNull()
+                t.column("corrections", .integer).notNull()
+                t.primaryKey(["sessionId", "keyCode"])
+            }
+            try db.create(table: "sessionPair") { t in
+                t.belongsTo("session", onDelete: .cascade).notNull()
+                t.column("fromKey", .integer).notNull()
+                t.column("toKey", .integer).notNull()
+                t.column("count", .integer).notNull()
+                t.column("totalMilliseconds", .double).notNull()
+                t.primaryKey(["sessionId", "fromKey", "toKey"])
+            }
+            // Filtered presses aren't part of a session; they're counted per hour since 1970 (UTC).
+            try db.create(table: "syntheticStat") { t in
+                t.column("hour", .integer).notNull()
+                t.column("appID", .text).notNull()
+                t.column("count", .integer).notNull()
+                t.primaryKey(["hour", "appID"])
+            }
+        }
         return migrator
     }
 
     /// Saves a finished live session with its key and key-pair statistics.
     /// - Parameter end: wall-clock time of the session's last press.
     @discardableResult
-    public func save(_ session: TypingSession, endingAt end: Date, calendar: Calendar) throws -> SessionRecord {
-        let record = SessionRecord(session, endingAt: end)
-        let scope = StatScope(day: Day.key(record.start, calendar: calendar), context: session.context)
-        return try db.write { db in
-            let saved = try record.inserted(db)
-            try Self.add(keys: session.keys, scope: scope, db: db)
-            try Self.add(pairs: session.pairs, scope: scope, db: db)
-            return saved
-        }
-    }
-
-    /// Adds key and pair statistics directly; used for imports and sample data.
-    public func add(keys: [UInt16: KeyCount], pairs: [KeyPair: PairTiming], day: String, context: TypingContext) throws {
-        let scope = StatScope(day: day, context: context)
+    public func save(_ session: TypingSession, endingAt end: Date) throws -> SessionRecord {
         try db.write { db in
-            try Self.add(keys: keys, scope: scope, db: db)
-            try Self.add(pairs: pairs, scope: scope, db: db)
-        }
-    }
-
-    private struct StatScope {
-        var day: String
-        var appID: String
-        var keyboardID: String
-        var inputSourceID: String
-
-        init(day: String, context: TypingContext) {
-            self.day = day
-            appID = context.appID
-            keyboardID = context.keyboardID ?? ""
-            inputSourceID = context.inputSourceID ?? ""
-        }
-
-        var arguments: [any DatabaseValueConvertible] { [day, appID, keyboardID, inputSourceID] }
-    }
-
-    private static func add(keys: [UInt16: KeyCount], scope: StatScope, db: Database) throws {
-        for (keyCode, count) in keys {
-            try db.execute(sql: """
-                INSERT INTO keyStat (day, appID, keyboardID, inputSourceID, keyCode, presses, corrections)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT DO UPDATE SET presses = presses + excluded.presses, corrections = corrections + excluded.corrections
-                """, arguments: StatementArguments(scope.arguments + [Int(keyCode), count.presses, count.corrections]))
-        }
-    }
-
-    private static func add(pairs: [KeyPair: PairTiming], scope: StatScope, db: Database) throws {
-        for (pair, timing) in pairs {
-            try db.execute(sql: """
-                INSERT INTO pairStat (day, appID, keyboardID, inputSourceID, fromKey, toKey, count, totalMilliseconds)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT DO UPDATE SET count = count + excluded.count, totalMilliseconds = totalMilliseconds + excluded.totalMilliseconds
-                """, arguments: StatementArguments(scope.arguments + [Int(pair.from), Int(pair.to), timing.count, timing.totalMilliseconds]))
+            let saved = try SessionRecord(session, endingAt: end).inserted(db)
+            for (keyCode, count) in session.keys {
+                try db.execute(
+                    sql: "INSERT INTO sessionKey (sessionId, keyCode, presses, corrections) VALUES (?, ?, ?, ?)",
+                    arguments: [saved.id, Int(keyCode), count.presses, count.corrections]
+                )
+            }
+            for (pair, timing) in session.pairs {
+                try db.execute(
+                    sql: "INSERT INTO sessionPair (sessionId, fromKey, toKey, count, totalMilliseconds) VALUES (?, ?, ?, ?, ?)",
+                    arguments: [saved.id, Int(pair.from), Int(pair.to), timing.count, timing.totalMilliseconds]
+                )
+            }
+            return saved
         }
     }
 
@@ -210,19 +202,27 @@ public struct SessionStore: Sendable {
         }
     }
 
-    /// Key statistics for the days in the interval, optionally narrowed to one keyboard or layout.
-    public func keyStats(in interval: DateInterval, calendar: Calendar, filter: StatFilter = StatFilter()) throws -> [UInt16: KeyCount] {
-        let (clause, arguments) = filter.sql(interval: interval, calendar: calendar)
+    /// Key statistics of sessions that started in the interval, optionally narrowed to an app, keyboard or layout.
+    public func keyStats(in interval: DateInterval, filter: StatFilter = StatFilter()) throws -> [UInt16: KeyCount] {
+        let (clause, arguments) = filter.sql(interval: interval)
         return try db.read { db in
-            let rows = try Row.fetchAll(db, sql: "SELECT keyCode, SUM(presses) AS presses, SUM(corrections) AS corrections FROM keyStat WHERE \(clause) GROUP BY keyCode", arguments: arguments)
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT k.keyCode, SUM(k.presses) AS presses, SUM(k.corrections) AS corrections
+                FROM sessionKey k JOIN session s ON s.id = k.sessionId
+                WHERE \(clause) GROUP BY k.keyCode
+                """, arguments: arguments)
             return Dictionary(uniqueKeysWithValues: rows.map { (UInt16($0["keyCode"] as Int), KeyCount(presses: $0["presses"], corrections: $0["corrections"])) })
         }
     }
 
-    public func pairStats(in interval: DateInterval, calendar: Calendar, filter: StatFilter = StatFilter()) throws -> [KeyPair: PairTiming] {
-        let (clause, arguments) = filter.sql(interval: interval, calendar: calendar)
+    public func pairStats(in interval: DateInterval, filter: StatFilter = StatFilter()) throws -> [KeyPair: PairTiming] {
+        let (clause, arguments) = filter.sql(interval: interval)
         return try db.read { db in
-            let rows = try Row.fetchAll(db, sql: "SELECT fromKey, toKey, SUM(count) AS count, SUM(totalMilliseconds) AS total FROM pairStat WHERE \(clause) GROUP BY fromKey, toKey", arguments: arguments)
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT p.fromKey, p.toKey, SUM(p.count) AS count, SUM(p.totalMilliseconds) AS total
+                FROM sessionPair p JOIN session s ON s.id = p.sessionId
+                WHERE \(clause) GROUP BY p.fromKey, p.toKey
+                """, arguments: arguments)
             return Dictionary(uniqueKeysWithValues: rows.map {
                 (KeyPair(from: UInt16($0["fromKey"] as Int), to: UInt16($0["toKey"] as Int)), PairTiming(count: $0["count"], totalMilliseconds: $0["total"]))
             })
@@ -265,37 +265,39 @@ public struct SessionStore: Sendable {
 
     // MARK: Synthetic input
 
-    public func addSynthetic(count: Int, appID: String, day: String) throws {
+    public func addSynthetic(count: Int, appID: String, hour: Int) throws {
         try db.write { db in
             try db.execute(sql: """
-                INSERT INTO syntheticStat (day, appID, count) VALUES (?, ?, ?)
+                INSERT INTO syntheticStat (hour, appID, count) VALUES (?, ?, ?)
                 ON CONFLICT DO UPDATE SET count = count + excluded.count
-                """, arguments: [day, appID, count])
+                """, arguments: [hour, appID, count])
         }
     }
 
-    /// Key presses filtered out as synthetic on the days in the interval, optionally for one app.
-    public func syntheticCount(in interval: DateInterval, calendar: Calendar, appID: String? = nil) throws -> Int {
-        let (clause, arguments) = StatFilter(appID: appID).sql(interval: interval, calendar: calendar)
-        return try db.read { db in
-            try Int.fetchOne(db, sql: "SELECT COALESCE(SUM(count), 0) FROM syntheticStat WHERE \(clause)", arguments: arguments) ?? 0
+    /// Key presses filtered out as synthetic in the hours overlapping the interval, optionally for one app.
+    public func syntheticCount(in interval: DateInterval, appID: String? = nil) throws -> Int {
+        var sql = "SELECT COALESCE(SUM(count), 0) FROM syntheticStat WHERE hour >= ? AND hour < ?"
+        var arguments: [any DatabaseValueConvertible] = [Hour.index(interval.start), Hour.index(interval.end.addingTimeInterval(3599))]
+        if let appID {
+            sql += " AND appID = ?"
+            arguments.append(appID)
         }
+        return try db.read { db in try Int.fetchOne(db, sql: sql, arguments: StatementArguments(arguments)) ?? 0 }
     }
 
     // MARK: Deletion
 
+    /// Deletes an app's sessions, with their key and pair statistics, and its filtered-input counts.
     public func deleteSessions(appID: String) throws {
         try db.write { db in
             _ = try SessionRecord.filter(Column("appID") == appID).deleteAll(db)
-            for table in ["keyStat", "pairStat", "syntheticStat"] {
-                try db.execute(sql: "DELETE FROM \(table) WHERE appID = ?", arguments: [appID])
-            }
+            try db.execute(sql: "DELETE FROM syntheticStat WHERE appID = ?", arguments: [appID])
         }
     }
 
     public func deleteAll() throws {
         try db.write { db in
-            for table in ["session", "keyStat", "pairStat", "syntheticStat", "keyboard", "inputSource"] {
+            for table in ["session", "syntheticStat", "keyboard", "inputSource"] {
                 try db.execute(sql: "DELETE FROM \(table)")
             }
         }
@@ -314,23 +316,23 @@ public struct StatFilter: Sendable, Equatable {
         self.inputSourceID = inputSourceID
     }
 
-    func sql(interval: DateInterval, calendar: Calendar) -> (String, StatementArguments) {
-        var clauses = ["day >= ?", "day < ?"]
-        var arguments: [any DatabaseValueConvertible] = [Day.key(interval.start, calendar: calendar), Day.key(interval.end, calendar: calendar)]
+    /// A WHERE clause over the session table aliased `s`.
+    func sql(interval: DateInterval) -> (String, StatementArguments) {
+        var clauses = ["s.start >= ?", "s.start < ?"]
+        var arguments: [any DatabaseValueConvertible] = [interval.start, interval.end]
         for (column, value) in [("appID", appID), ("keyboardID", keyboardID), ("inputSourceID", inputSourceID)] {
             guard let value else { continue }
-            clauses.append("\(column) = ?")
+            clauses.append("s.\(column) = ?")
             arguments.append(value)
         }
         return (clauses.joined(separator: " AND "), StatementArguments(arguments))
     }
 }
 
-/// Calendar days as sortable "yyyy-MM-dd" keys.
-public enum Day {
-    public static func key(_ date: Date, calendar: Calendar) -> String {
-        let parts = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04d-%02d-%02d", parts.year!, parts.month!, parts.day!)
+/// Hours since 1970 in UTC, the bucket for filtered-input counts.
+public enum Hour {
+    public static func index(_ date: Date) -> Int {
+        Int((date.timeIntervalSince1970 / 3600).rounded(.down))
     }
 }
 

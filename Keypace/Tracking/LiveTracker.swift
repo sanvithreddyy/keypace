@@ -52,11 +52,11 @@ final class LiveTracker {
     private let devices: KeyboardDevices?
     private var engine: SessionTracker
     private var synthetic: SyntheticFilter
-    /// Synthetic presses not yet written, per day received and app.
+    /// Synthetic presses not yet written, per hour received and app.
     private var pendingSynthetic: [SyntheticBucket: Int] = [:]
 
     private struct SyntheticBucket: Hashable {
-        var day: String
+        var hour: Int
         var appID: String
     }
     /// Keyboards and layouts typed on since the last save.
@@ -136,17 +136,17 @@ final class LiveTracker {
 
     func keyStats(in interval: DateInterval, filter: StatFilter = StatFilter()) -> [UInt16: KeyCount] {
         guard let store else { return [:] }
-        return attempt { try store.keyStats(in: interval, calendar: .current, filter: filter) } ?? [:]
+        return attempt { try store.keyStats(in: interval, filter: filter) } ?? [:]
     }
 
     func pairStats(in interval: DateInterval, filter: StatFilter = StatFilter()) -> [KeyPair: PairTiming] {
         guard let store else { return [:] }
-        return attempt { try store.pairStats(in: interval, calendar: .current, filter: filter) } ?? [:]
+        return attempt { try store.pairStats(in: interval, filter: filter) } ?? [:]
     }
 
     func syntheticCount(in interval: DateInterval, appID: String? = nil) -> Int {
         guard let store else { return 0 }
-        return attempt { try store.syntheticCount(in: interval, calendar: .current, appID: appID) } ?? 0
+        return attempt { try store.syntheticCount(in: interval, appID: appID) } ?? 0
     }
 
     func keyboards() -> [KeyboardRecord] {
@@ -204,7 +204,7 @@ final class LiveTracker {
             return
         }
         if synthetic.isSynthetic(sourceStateID: key.sourceStateID, sourceProcessID: key.sourceProcessID, time: key.time, isRepeat: key.isRepeat) {
-            pendingSynthetic[SyntheticBucket(day: Day.key(clock.now(), calendar: .current), appID: appID), default: 0] += 1
+            pendingSynthetic[SyntheticBucket(hour: Hour.index(clock.now()), appID: appID), default: 0] += 1
             return
         }
         let press = KeyPress(
@@ -237,7 +237,7 @@ final class LiveTracker {
     private func save(_ session: TypingSession) {
         // Session times are seconds since boot; anchor the last press to the wall clock.
         let end = clock.now().addingTimeInterval(session.end - clock.uptime())
-        attempt { try store?.save(session, endingAt: end, calendar: .current) }
+        attempt { try store?.save(session, endingAt: end) }
         for keyboard in seenKeyboards.values { attempt { try store?.noteKeyboard(keyboard) } }
         for source in seenInputSources.values { attempt { try store?.noteInputSource(source) } }
         seenKeyboards = [:]
@@ -249,7 +249,7 @@ final class LiveTracker {
     private func flushSynthetic() {
         guard !pendingSynthetic.isEmpty else { return }
         for (bucket, count) in pendingSynthetic {
-            attempt { try store?.addSynthetic(count: count, appID: bucket.appID, day: bucket.day) }
+            attempt { try store?.addSynthetic(count: count, appID: bucket.appID, hour: bucket.hour) }
         }
         pendingSynthetic = [:]
         revision += 1
