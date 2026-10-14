@@ -57,22 +57,36 @@ The app tests compile the app's code into the test bundle and run it with
 
 | Metric | Definition |
 | --- | --- |
-| WPM | (characters − backspaces) ÷ 5, per minute of typing |
-| CPM | characters − backspaces, per minute |
-| KPM | physical key presses per minute |
-| Corrections | backspaces ÷ characters typed |
+| WPM | characters that stayed (typed minus deleted again) ÷ 5, per minute of typing time |
+| CPM | characters that stayed, per minute of typing time |
+| KPM | physical key presses per minute of typing time |
+| Corrections | characters deleted again ÷ characters typed |
 
-A session runs from its first to its last keystroke and ends after 5 seconds
-without typing, or when you switch apps, keyboards or layouts. Sessions under
-10 characters are discarded. Both limits are adjustable in Settings. Combined
-figures weight each session by its length.
+Typing time leaves out pauses. Each gap between keystrokes counts as typing
+when it's under four times your usual gap for that key pair (or that key, or
+overall), kept between 250 ms and 3 s; before there's any history, gaps up to
+600 ms count. The keystroke that starts a burst is given one usual gap, so
+short bursts aren't overstated.
 
-Corrections count every deletion, including deliberate rewrites, so the app
-calls them corrections rather than accuracy. Each deletion is charged to the
-key whose character it removed. Key-pair timings cover consecutive characters
-typed less than two seconds apart. Finger statistics assume touch-typing
-finger assignments. Shortcuts and navigation keys count as keystrokes but not
-per key, so a key's correction rate is over the characters it typed.
+A session ends after 5 seconds without typing, or when you switch apps,
+keyboards or layouts. Sessions under 10 characters are discarded. Both limits
+are adjustable in Settings. Combined figures weight each session by its typing
+time.
+
+Deletions only count when they remove characters typed in the same session;
+deleting text that was already there is editing. Option-Delete and
+Command-Delete count every character they remove. Corrections include
+deliberate rewrites, so the app calls them corrections rather than accuracy.
+Each deletion is charged to the key whose character it removed. Key-pair
+timings cover consecutive characters whose gap counted as typing. Finger
+statistics assume touch-typing finger assignments. Shortcuts and navigation
+keys count as keystrokes but not per key.
+
+The live number covers the last 8 seconds of typing and clears 2 seconds after
+you stop.
+
+Sessions saved before typing time was measured keep their original numbers:
+elapsed time and every backspace.
 
 Keyboards are told apart by model and, when the keyboard reports one, a unique
 device ID or serial number. Two keyboards of the same model that report neither

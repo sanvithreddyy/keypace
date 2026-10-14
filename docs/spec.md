@@ -30,13 +30,17 @@ patterns in the background and keeps everything on this Mac.
    - A session ends after N seconds without a keystroke (default 5) or when
      the frontmost app, keyboard or layout changes.
    - Sessions shorter than the minimum size (default 10 characters) are not saved.
-   - WPM = net characters / 5 per minute; CPM; KPM (keystrokes per minute,
-     for IME languages).
-   - Net characters = characters − backspaces. The correction rate is
-     backspaces per character typed, and is labeled as corrections, not accuracy.
+   - Typing time leaves out pauses: a gap counts when it's under 4× the median
+     gap for that key pair, key or overall, clamped to 250 ms–3 s (600 ms before
+     there's history). A burst's first keystroke gets one median gap.
+   - WPM = characters that stayed ÷ 5 per minute of typing time; CPM; KPM.
+   - Deletions count only when they remove characters typed in the session;
+     Option-Delete removes the word, Command-Delete the line. Corrections =
+     deleted ÷ typed, labeled as corrections, not accuracy.
    - Held character keys count once; a held Delete counts every deletion.
-   - Per-key corrections: each backspace is charged to the key whose
-     character it deletes.
+   - Per-key corrections: each deleted character is charged to the key that
+     typed it.
+   - Live speed: the last 8 s of typing, cleared 2 s after typing stops.
 3. Synthetic-input filter: keystrokes must come from the HID system event
    source with no posting process; strict mode also drops presses under 5 ms
    apart. Filtered presses are counted, not recorded as typing. Paste and AI
