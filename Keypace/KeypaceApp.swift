@@ -40,6 +40,8 @@ private struct MenuBarLabel: View {
             Image(systemName: "keyboard.badge.exclamationmark")
         } else if format != .icon, let wpm = wpm {
             Text(format == .withUnit ? "\(Format.wpm(wpm)) wpm" : Format.wpm(wpm)).monospacedDigit()
+                .help(number == .liveThenToday && tracker.liveWPM != nil
+                      ? "Live net speed · last 8 seconds" : "Today's average net speed")
         } else {
             Image(systemName: "keyboard")
         }

@@ -11,9 +11,10 @@ struct SnapshotTests {
         .appending(path: "build/snapshots", directoryHint: .isDirectory)
 
     let tracker: LiveTracker
+    let clock: TestClock
 
     init() throws {
-        let clock = TestClock(date: .now)
+        clock = TestClock(date: .now)
         tracker = try makeTracker(clock: clock)
         SampleData.fill(tracker, clock: clock, days: 45, endingAt: .now)
         SampleData.typeToday(tracker, clock: clock)
@@ -32,7 +33,29 @@ struct SnapshotTests {
     }
 
     @Test func `live metrics`() throws {
-        try render(LiveMetrics(tracker: tracker), size: CGSize(width: 220, height: 100), name: "live-metrics")
+        try renderMetrics(name: "live-metrics")
+    }
+
+    @Test(arguments: ["typing", "correcting", "paused"])
+    func `live speed states`(state: String) throws {
+        let typist = Typist(tracker: tracker, clock: clock)
+        typist.type(state == "correcting" ? "teh⌫⌫he quick brown fox jumps" : "the quick brown fox jumps", interval: 0.12)
+        if state == "paused" { typist.pause(2.1) }
+        #expect((tracker.liveWPM != nil) == (state != "paused"))
+        #expect(tracker.current != nil)
+
+        try renderMetrics(name: "live-metrics-\(state)")
+
+        UserDefaults.standard.set(Dropdown.Tab.speed.rawValue, forKey: "dropdownTab")
+        UserDefaults.standard.set(Period.today.rawValue, forKey: "dropdownPeriod")
+        defer {
+            UserDefaults.standard.removeObject(forKey: "dropdownTab")
+            UserDefaults.standard.removeObject(forKey: "dropdownPeriod")
+        }
+        let dropdown = Dropdown(tracker: tracker)
+        let dropdownSize = NSHostingController(rootView: dropdown).sizeThatFits(in: CGSize(width: Dropdown.width, height: 2000))
+        #expect(dropdownSize.width <= Dropdown.width + 0.5)
+        try render(dropdown.frame(width: Dropdown.width), size: CGSize(width: Dropdown.width, height: 640), name: "dropdown-speed-\(state)")
     }
 
     @Test(arguments: [(Dropdown.Tab.speed, Period.today), (.speed, .week), (.speed, .month), (.keys, .week), (.keys, .today), (.apps, .week), (.records, .today)])
@@ -48,6 +71,14 @@ struct SnapshotTests {
             .sizeThatFits(in: CGSize(width: Dropdown.width, height: 2000))
         #expect(needed.width <= Dropdown.width + 0.5, "\(tab) tab needs \(needed.width) pt")
         try render(Dropdown(tracker: tracker).frame(width: Dropdown.width), size: CGSize(width: Dropdown.width, height: 640), name: "dropdown-\(tab)-\(period)")
+    }
+
+    private func renderMetrics(name: String) throws {
+        let metrics = LiveMetrics(tracker: tracker)
+        let needed = NSHostingController(rootView: metrics).sizeThatFits(in: CGSize(width: 220, height: 2000))
+        #expect(needed.width <= 220.5)
+        // The real window sizes to its content, so the snapshot must use its full height too.
+        try render(metrics, size: CGSize(width: 220, height: needed.height.rounded(.up)), name: name)
     }
 
     private func render(_ view: some View, size: CGSize, name: String) throws {

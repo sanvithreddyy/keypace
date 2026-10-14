@@ -127,7 +127,8 @@ struct BreakdownTable<RowMenu: View>: View {
                 Text(heading)
                 Text("Typing time").gridColumnAlignment(.trailing)
                 Text("Share").gridColumnAlignment(.trailing)
-                Text("WPM").gridColumnAlignment(.trailing)
+                Text("Net WPM").gridColumnAlignment(.trailing)
+                    .help("Speed after corrections; thinking pauses are excluded from new sessions.")
                 Text("Change").gridColumnAlignment(.trailing)
                 Text("Corrections").gridColumnAlignment(.trailing)
             }

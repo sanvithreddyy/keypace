@@ -24,8 +24,8 @@ enum MenuBarNumber: String, CaseIterable {
 
     var description: String {
         switch self {
-        case .liveThenToday: "Shows the current session once you've typed a few words, then today's speed."
-        case .today: "Always shows today's speed."
+        case .liveThenToday: "Shows speed over the last 8 seconds while you type, then today's average."
+        case .today: "Always shows today's average of saved sessions."
         }
     }
 }

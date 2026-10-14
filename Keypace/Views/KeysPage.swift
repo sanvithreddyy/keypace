@@ -94,7 +94,7 @@ struct KeyboardHeatmap: View {
     let label: (UInt16) -> String
 
     /// Presses a key needs before its correction rate is shown.
-    static let minimumPresses = 20
+    static let minimumPresses = KeyRankings.minimumPresses
 
     var body: some View {
         let values = self.values
@@ -158,9 +158,7 @@ private struct CorrectedKeys: View {
     let layout: InputSourceRecord?
 
     var body: some View {
-        let ranked = keys.filter { $0.value.presses >= KeyboardHeatmap.minimumPresses && $0.value.corrections > 0 && $0.key != 51 && $0.key != 49 }
-            .sorted { ($0.value.correctionRate ?? 0) > ($1.value.correctionRate ?? 0) }
-            .prefix(6)
+        let ranked = KeyRankings.corrected(keys, sources: sources, layout: layout, limit: 6)
         VStack(alignment: .leading, spacing: 0) {
             SectionHeading(title: "Most corrected keys")
             if ranked.isEmpty {
@@ -190,20 +188,15 @@ private struct PairList: View {
     let sources: InputSources?
     let layout: InputSourceRecord?
 
-    /// Times a pair must occur before its average counts.
-    static let minimumCount = 5
-
     var body: some View {
-        let ranked = pairs.filter { $0.value.count >= Self.minimumCount }
-            .sorted { slowest ? ($0.value.averageMilliseconds ?? 0) > ($1.value.averageMilliseconds ?? 0) : ($0.value.averageMilliseconds ?? 0) < ($1.value.averageMilliseconds ?? 0) }
-            .prefix(6)
+        let ranked = KeyRankings.pairs(pairs, slowest: slowest, sources: sources, layout: layout, limit: 6)
         VStack(alignment: .leading, spacing: 0) {
             SectionHeading(title: title)
             if ranked.isEmpty {
                 Text("Not enough pairs yet.").foregroundStyle(.secondary).font(.callout)
             } else {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
-                    ForEach(Array(ranked), id: \.key) { pair, timing in
+                    ForEach(Array(ranked), id: \.pair) { pair, timing in
                         GridRow {
                             Text(KeyLabels.pair((pair.from, pair.to), using: sources, layout: layout))
                             Text("\(Int((timing.averageMilliseconds ?? 0).rounded())) ms").gridColumnAlignment(.trailing)

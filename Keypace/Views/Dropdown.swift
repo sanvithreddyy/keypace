@@ -224,10 +224,11 @@ private struct SpeedTab: View {
 
     var body: some View {
         let totals = data.totals
-        PanelHeader(title: "Speed") { PeriodPicker(period: $period) }
+        PanelHeader(title: "Net speed") { PeriodPicker(period: $period) }
         Panel {
             HStack(spacing: 6) {
-                Tile(title: data.period.title, value: Format.wpm(totals.wpm), unit: "wpm", detail: change)
+                Tile(title: "\(data.period.title) average", value: Format.wpm(totals.wpm), unit: "wpm", detail: change)
+                    .help("Average speed of saved sessions after corrections. Thinking pauses are excluded from new sessions.")
                 session
             }
             if totals.duration > 0 {
@@ -244,6 +245,7 @@ private struct SpeedTab: View {
         Panel(spacing: 0) {
             HStack {
                 Text("Corrections").font(.callout)
+                    .help("Characters deleted again as a share of characters typed. Intentional rewrites count too.")
                 Spacer()
                 Text(Format.percent(totals.correctionRate)).font(.callout).foregroundStyle(.secondary)
             }
@@ -261,7 +263,8 @@ private struct SpeedTab: View {
     /// Speed over the last few seconds while typing, else the last session.
     @ViewBuilder private var session: some View {
         if let live = tracker.liveWPM {
-            Tile(title: "Now", value: Format.wpm(live), unit: "wpm", detail: Text("last few seconds"))
+            Tile(title: "Live", value: Format.wpm(live), unit: "wpm", detail: Text("last 8 seconds"))
+                .help("Speed after corrections over the last 8 seconds. Thinking pauses are excluded.")
         } else if let last = data.sessions.last {
             Tile(title: "Last session", value: Format.wpm(last.totals.wpm), unit: "wpm",
                  detail: Text(last.end.formatted(date: .omitted, time: .shortened)))
@@ -312,19 +315,15 @@ private struct KeysTab: View {
     }
 
     private func correctedKeys(_ keys: [UInt16: KeyCount]) -> [(String, String)] {
-        keys.filter { $0.value.presses >= KeyboardHeatmap.minimumPresses && $0.value.corrections > 0 && $0.key != 49 && $0.key != 51 }
-            .sorted { ($0.value.correctionRate ?? 0) > ($1.value.correctionRate ?? 0) }
-            .prefix(4)
-            .map { (KeyLabels.label($0.key, using: tracker.inputSources), Format.percent($0.value.correctionRate, decimals: 0)) }
+        KeyRankings.corrected(keys, sources: tracker.inputSources, limit: 4)
+            .map { (KeyLabels.label($0.key, using: tracker.inputSources), Format.percent($0.count.correctionRate, decimals: 0)) }
     }
 
     private func slowPairs(_ pairs: [KeyPair: PairTiming]) -> [(String, String)] {
-        pairs.filter { $0.value.count >= 5 }
-            .sorted { ($0.value.averageMilliseconds ?? 0) > ($1.value.averageMilliseconds ?? 0) }
-            .prefix(3)
+        KeyRankings.pairs(pairs, slowest: true, sources: tracker.inputSources, limit: 3)
             .map {
-                (KeyLabels.pair(($0.key.from, $0.key.to), using: tracker.inputSources).replacingOccurrences(of: " ", with: "\u{202F}"),
-                 "\(Int(($0.value.averageMilliseconds ?? 0).rounded())) ms")
+                (KeyLabels.pair(($0.pair.from, $0.pair.to), using: tracker.inputSources).replacingOccurrences(of: " ", with: "\u{202F}"),
+                 "\(Int(($0.timing.averageMilliseconds ?? 0).rounded())) ms")
             }
     }
 

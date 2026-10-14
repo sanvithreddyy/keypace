@@ -14,13 +14,15 @@ struct LiveMetrics: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(Format.wpm(live ?? today.wpm)).font(.system(size: 44, weight: .semibold)).contentTransition(.numericText())
-                Text(live == nil ? "wpm today" : "wpm").font(.system(size: 14, weight: .medium)).foregroundStyle(.secondary)
+                Text(live == nil ? "avg wpm" : "live wpm").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
             }
+            .help(live == nil ? "Today's average of saved sessions after corrections."
+                             : "Speed after corrections over the last 8 seconds, with thinking pauses excluded.")
             Group {
-                if let session {
-                    Text("\(Format.duration(session.duration)) · \(Format.percent(session.totals.correctionRate)) corrected")
+                if live != nil, let session {
+                    Text("Session: \(Format.percent(session.totals.correctionRate)) corrected")
                 } else {
-                    Text("\(Format.duration(today.duration)) typed today")
+                    Text("Today · \(Format.duration(today.duration)) typing")
                 }
             }
             .font(.callout)

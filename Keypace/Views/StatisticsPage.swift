@@ -119,7 +119,8 @@ struct StatisticsPage: View {
         return VStack(spacing: 0) {
             Divider()
             HStack(alignment: .top, spacing: 0) {
-                StatBlock(label: "WPM", value: Format.wpm(totals.wpm))
+                StatBlock(label: "Net WPM", value: Format.wpm(totals.wpm))
+                    .help("Average speed after corrections, weighted by typing time.")
                 Divider()
                 StatBlock(label: "CPM", value: Format.wpm(totals.cpm))
                 Divider()

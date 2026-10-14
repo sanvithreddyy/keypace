@@ -49,9 +49,10 @@ private struct StatRow: View {
         VStack(spacing: 0) {
             Divider()
             HStack(alignment: .top, spacing: 0) {
-                block("Speed", "\(Format.wpm(now.wpm)) wpm", change: difference(now.wpm, before?.wpm).map {
+                block("Net speed", "\(Format.wpm(now.wpm)) wpm", change: difference(now.wpm, before?.wpm).map {
                     (Format.signed($0), tone($0, threshold: 0.5, higherIsBetter: true))
                 })
+                .help("Average speed after corrections, weighted by typing time.")
                 Divider()
                 block("Corrections", Format.percent(now.correctionRate), change: difference(now.correctionRate, before?.correctionRate).map {
                     (Format.signed($0 * 100, decimals: 1) + " pts", tone($0, threshold: 0.0005, higherIsBetter: false))

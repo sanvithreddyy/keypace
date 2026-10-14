@@ -6,9 +6,20 @@ import KeypaceCore
 enum KeyLabels {
     static func label(_ keyCode: UInt16, using sources: InputSources?, layout: InputSourceRecord? = nil) -> String {
         if let named = named[keyCode] { return named }
+        return characterLabel(keyCode, using: sources, layout: layout) ?? "?"
+    }
+
+    /// Rankings use visible text keys; the heatmap still includes every recorded key.
+    static func isPrintable(_ keyCode: UInt16, using sources: InputSources?, layout: InputSourceRecord? = nil) -> Bool {
+        guard named[keyCode] == nil, let text = characterLabel(keyCode, using: sources, layout: layout) else { return false }
+        return KeyClassifier.kind(keyCode: keyCode, commandOrControl: false, text: text) == .character
+            && !text.allSatisfy(\.isWhitespace)
+    }
+
+    private static func characterLabel(_ keyCode: UInt16, using sources: InputSources?, layout: InputSourceRecord?) -> String? {
         if let saved = layout?.labels?[keyCode], !saved.isEmpty { return saved }
         if let label = sources?.label(for: keyCode, inputSourceID: layout?.id), !label.isEmpty { return label }
-        return us[keyCode] ?? "?"
+        return us[keyCode]
     }
 
     /// A key pair as it reads in text: "T → H", with named keys as their symbols ("⏎ → ⏎").
@@ -24,7 +35,7 @@ enum KeyLabels {
 
     /// Keys that type nothing visible are labeled by name.
     private static let named: [UInt16: String] = [
-        36: "return", 48: "tab", 49: "space", 51: "delete", 53: "esc", 56: "shift", 57: "caps lock", 60: "shift",
+        36: "return", 48: "tab", 49: "space", 51: "delete", 53: "esc", 56: "shift", 57: "caps lock", 60: "shift", 76: "enter",
     ]
 
     private static let us: [UInt16: String] = [
