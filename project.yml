@@ -1,0 +1,36 @@
+name: Keypace
+options:
+  bundleIdPrefix: com.sanvith
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+packages:
+  KeypaceCore:
+    path: Packages/KeypaceCore
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+targets:
+  Keypace:
+    type: application
+    platform: macOS
+    sources: [Keypace]
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
+    dependencies:
+      - package: KeypaceCore
+    info:
+      path: Keypace/Info.plist
+      properties:
+        CFBundleDisplayName: Keypace
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "1"
+        LSUIElement: true
+        LSMinimumSystemVersion: "15.0"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sanvith.keypace
+        MARKETING_VERSION: "0.1"
