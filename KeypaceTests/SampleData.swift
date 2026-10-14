@@ -68,6 +68,8 @@ extension SampleData {
             clock.date = now.addingTimeInterval(-hoursAgo * 3600)
             let typist = Typist(tracker: tracker, clock: clock)
             for sentence in sentences.prefix(4) { typist.type(sentence + " ", interval: pace) }
+            // Slow paragraph breaks, so key pairs with named keys show up among the slowest.
+            for _ in 0..<6 { typist.type("\n\n", interval: 0.6) }
             typist.pause()
         }
         clock.date = now

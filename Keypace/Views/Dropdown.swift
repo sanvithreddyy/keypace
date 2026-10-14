@@ -3,6 +3,9 @@ import KeypaceCore
 
 /// The menu-bar dropdown: icon tabs for speed, keys, apps and records, over a shared period.
 struct Dropdown: View {
+    /// The panel's width; content must fit inside it.
+    static let width: CGFloat = 340
+
     let tracker: LiveTracker
     @AppStorage("dropdownTab") private var tab = Tab.speed
     @AppStorage("dropdownPeriod") private var period = Period.today
@@ -43,7 +46,6 @@ struct Dropdown: View {
             Footer(openMain: openMain).padding(.top, 12)
         }
         .padding(14)
-        .frame(width: 340)
         .monospacedDigit()
     }
 
@@ -318,7 +320,7 @@ private struct KeysTab: View {
             .sorted { ($0.value.averageMilliseconds ?? 0) > ($1.value.averageMilliseconds ?? 0) }
             .prefix(3)
             .map {
-                (KeyLabels.pair(($0.key.from, $0.key.to), using: tracker.inputSources).replacingOccurrences(of: " ", with: ""),
+                (KeyLabels.pair(($0.key.from, $0.key.to), using: tracker.inputSources).replacingOccurrences(of: " ", with: "\u{202F}"),
                  "\(Int(($0.value.averageMilliseconds ?? 0).rounded())) ms")
             }
     }
@@ -329,7 +331,7 @@ private struct KeysTab: View {
             if items.isEmpty {
                 Text("Not enough typing yet").font(.callout).foregroundStyle(.tertiary)
             } else {
-                HStack(spacing: 6) {
+                FlowLayout(spacing: 6) {
                     ForEach(items, id: \.0) { label, value in
                         HStack(spacing: 4) {
                             Text(label).font(.system(.callout, design: .monospaced))

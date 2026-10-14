@@ -8,7 +8,7 @@ struct KeypaceApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            Dropdown(tracker: tracker)
+            Dropdown(tracker: tracker).frame(width: Dropdown.width)
         } label: {
             MenuBarLabel(tracker: tracker)
         }

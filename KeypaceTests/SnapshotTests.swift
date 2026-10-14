@@ -35,7 +35,7 @@ struct SnapshotTests {
         try render(LiveMetrics(tracker: tracker), size: CGSize(width: 220, height: 100), name: "live-metrics")
     }
 
-    @Test(arguments: [(Dropdown.Tab.speed, Period.today), (.speed, .week), (.speed, .month), (.keys, .week), (.apps, .week), (.records, .today)])
+    @Test(arguments: [(Dropdown.Tab.speed, Period.today), (.speed, .week), (.speed, .month), (.keys, .week), (.keys, .today), (.apps, .week), (.records, .today)])
     func dropdown(tab: Dropdown.Tab, period: Period) throws {
         UserDefaults.standard.set(tab.rawValue, forKey: "dropdownTab")
         UserDefaults.standard.set(period.rawValue, forKey: "dropdownPeriod")
@@ -43,7 +43,11 @@ struct SnapshotTests {
             UserDefaults.standard.removeObject(forKey: "dropdownTab")
             UserDefaults.standard.removeObject(forKey: "dropdownPeriod")
         }
-        try render(Dropdown(tracker: tracker), size: CGSize(width: 340, height: 640), name: "dropdown-\(tab)-\(period)")
+        // The content must fit the panel's width, whatever the labels inside it.
+        let needed = NSHostingController(rootView: Dropdown(tracker: tracker))
+            .sizeThatFits(in: CGSize(width: Dropdown.width, height: 2000))
+        #expect(needed.width <= Dropdown.width + 0.5, "\(tab) tab needs \(needed.width) pt")
+        try render(Dropdown(tracker: tracker).frame(width: Dropdown.width), size: CGSize(width: Dropdown.width, height: 640), name: "dropdown-\(tab)-\(period)")
     }
 
     private func render(_ view: some View, size: CGSize, name: String) throws {

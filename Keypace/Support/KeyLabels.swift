@@ -11,11 +11,16 @@ enum KeyLabels {
         return us[keyCode] ?? "?"
     }
 
-    /// A key pair as it reads in text: "T → H", with Space shown as ␣.
+    /// A key pair as it reads in text: "T → H", with named keys as their symbols ("⏎ → ⏎").
     static func pair(_ pair: (from: UInt16, to: UInt16), using sources: InputSources?, layout: InputSourceRecord? = nil) -> String {
-        func short(_ code: UInt16) -> String { code == 49 ? "␣" : label(code, using: sources, layout: layout) }
+        func short(_ code: UInt16) -> String { symbols[code] ?? label(code, using: sources, layout: layout) }
         return "\(short(pair.from)) → \(short(pair.to))"
     }
+
+    /// Compact symbols for named keys, used where space is tight.
+    private static let symbols: [UInt16: String] = [
+        36: "⏎", 48: "⇥", 49: "␣", 51: "⌫", 53: "⎋", 56: "⇧", 57: "⇪", 60: "⇧",
+    ]
 
     /// Keys that type nothing visible are labeled by name.
     private static let named: [UInt16: String] = [
