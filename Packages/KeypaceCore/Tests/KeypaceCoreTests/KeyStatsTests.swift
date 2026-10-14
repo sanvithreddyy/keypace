@@ -72,3 +72,16 @@ struct KeyStatsTests {
         #expect(tracker.current?.keys[Key.t] == nil)
     }
 }
+
+struct LongSessionTests {
+    @Test func `every deletion is attributed, however long the session`() throws {
+        var tracker = SessionTracker(minimumCharacters: 1)
+        for i in 0..<300 { _ = tracker.record(KeyPress(time: Double(i) * 0.1, keyCode: 0, kind: .character), in: TypingContext(appID: "a")) }
+        _ = tracker.record(KeyPress(time: 30.1, keyCode: 51, kind: .backspace), in: TypingContext(appID: "a"))
+        for i in 1..<300 { _ = tracker.record(KeyPress(time: 30.1 + Double(i) * 0.03, keyCode: 51, kind: .backspace, isRepeat: true), in: TypingContext(appID: "a")) }
+        let ended = tracker.end()
+        let session = try #require(ended)
+        #expect(session.backspaces == 300)
+        #expect(session.keys[0]?.corrections == 300)
+    }
+}

@@ -19,7 +19,6 @@ public struct SessionTracker: Sendable {
     /// Keys of characters typed and not yet deleted, most recent last.
     private var typedKeys: [UInt16] = []
     private var lastCharacter: (keyCode: UInt16, time: Double)?
-    private static let typedKeysLimit = 256
 
     public init(inactivityTimeout: Double = 5, minimumCharacters: Int = 10) {
         self.inactivityTimeout = inactivityTimeout
@@ -51,7 +50,6 @@ public struct SessionTracker: Sendable {
             }
             lastCharacter = (press.keyCode, press.time)
             typedKeys.append(press.keyCode)
-            if typedKeys.count > Self.typedKeysLimit { typedKeys.removeFirst() }
             current = session
         case (.backspace, _):
             var session = open(in: context, at: press.time)
