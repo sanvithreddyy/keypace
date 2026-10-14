@@ -163,14 +163,44 @@ struct OwnershipTests {
         #expect(session.keys[11]?.corrections == 0)
     }
 
-    @Test func `keypad enter is a line break for command-delete`() throws {
-        #expect(KeyClassifier.kind(keyCode: 76, commandOrControl: false, text: "\u{3}") == .character)
+    @Test func `keypad enter isn't typing, and ends what counts as yours`() throws {
+        // Where Enter submits, it types nothing, so it's a non-text key like any other.
+        #expect(KeyClassifier.kind(keyCode: 76, commandOrControl: false, text: "\u{3}") == .other)
         let session = try run { tracker in
-            for (i, key) in [UInt16(0), 11, 76, 8, 2].enumerated() {
+            for (i, key) in [UInt16(0), 11].enumerated() {
                 _ = tracker.record(KeyPress(time: Double(i) * 0.2, keyCode: key, kind: .character), in: app)
             }
-            _ = tracker.record(KeyPress(time: 1.0, keyCode: 51, kind: .deleteLine), in: app)
+            _ = tracker.record(KeyPress(time: 0.4, keyCode: 76, kind: .other), in: app)
+            _ = tracker.record(KeyPress(time: 0.6, keyCode: 51, kind: .deleteLine), in: app)
         }
-        #expect(session.deletions == 2)
+        #expect(session.characters == 2)
+        #expect(session.deletions == 0)
+    }
+
+    @Test func `held spaces still bound option-delete, without being counted`() throws {
+        let session = try run { tracker in
+            _ = tracker.record(KeyPress(time: 0, keyCode: 0, kind: .character), in: app) // a
+            _ = tracker.record(KeyPress(time: 0.2, keyCode: 11, kind: .character), in: app) // b
+            _ = tracker.record(KeyPress(time: 0.4, keyCode: 49, kind: .character), in: app) // space
+            _ = tracker.record(KeyPress(time: 0.7, keyCode: 49, kind: .character, isRepeat: true), in: app)
+            _ = tracker.record(KeyPress(time: 0.75, keyCode: 49, kind: .character, isRepeat: true), in: app)
+            _ = tracker.record(KeyPress(time: 1.0, keyCode: 51, kind: .deleteWord), in: app)
+        }
+        // Option-Delete removes the three spaces and "ab"; the two held repeats weren't counted.
+        #expect(session.deletions == 3)
+        #expect(session.keys[49]?.corrections == 1)
+    }
+
+    @Test func `a held return stays a line boundary`() throws {
+        let session = try run { tracker in
+            _ = tracker.record(KeyPress(time: 0, keyCode: 0, kind: .character), in: app) // a
+            _ = tracker.record(KeyPress(time: 0.2, keyCode: 36, kind: .character), in: app) // ⏎
+            _ = tracker.record(KeyPress(time: 0.5, keyCode: 36, kind: .character, isRepeat: true), in: app) // held ⏎
+            _ = tracker.record(KeyPress(time: 0.7, keyCode: 11, kind: .character), in: app) // b
+            _ = tracker.record(KeyPress(time: 0.9, keyCode: 51, kind: .deleteLine), in: app) // removes b
+            _ = tracker.record(KeyPress(time: 1.1, keyCode: 51, kind: .backspace), in: app) // removes the held ⏎
+        }
+        #expect(session.deletions == 1)
+        #expect(session.keys[36]?.corrections == 0)
     }
 }

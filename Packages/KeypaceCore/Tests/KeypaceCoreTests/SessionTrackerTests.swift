@@ -147,6 +147,22 @@ struct SessionTrackerTests {
     }
 }
 
+struct TypingTimeCapTests {
+    @Test func `typing time never exceeds the session plus one first-keystroke allowance`() throws {
+        var tracker = SessionTracker(minimumCharacters: 1)
+        let app = TypingContext(appID: "a")
+        // Each character follows an arrow key, so each starts a new burst with its own allowance.
+        for i in 0..<10 {
+            _ = tracker.record(KeyPress(time: Double(i) * 0.1, keyCode: 123, kind: .other), in: app)
+            _ = tracker.record(KeyPress(time: Double(i) * 0.1 + 0.02, keyCode: 0, kind: .character), in: app)
+        }
+        let ended = tracker.end()
+        let session = try #require(ended)
+        #expect(abs(session.duration - 0.9) < 1e-9)
+        #expect(session.activeDuration <= session.duration + 0.2 + 1e-9)
+    }
+}
+
 struct DeleteScopeTests {
     private let notes = TypingContext(appID: "com.apple.Notes")
 
