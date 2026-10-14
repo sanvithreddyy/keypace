@@ -1,15 +1,17 @@
 import SwiftUI
 import KeypaceCore
 
-/// Speed as one column per hour or day, starting from zero. The fastest column is solid ink with its
-/// value, the current one is outlined, and the average is a dashed line. Empty slots are short stubs.
+/// Speed as one column per hour or day across the full width, starting from zero. The fastest column is
+/// solid ink with its value, the current one is outlined, and the average is a dashed line; values sit on
+/// the marks instead of a scale. Empty slots
+/// are short stubs; slots still to come are fainter stubs, so the axis always runs edge to edge.
 struct SpeedColumns: View {
     struct Slot: Identifiable {
         let id: Int
         /// Axis label, or nil for slots without one.
         var label: String?
         var wpm: Double?
-        /// Slots still to come, like later hours today, draw nothing.
+        /// Slots still to come, like later hours today.
         var isFuture = false
     }
 
@@ -25,18 +27,10 @@ struct SpeedColumns: View {
         let currentIndex = lastIsCurrent ? slots.lastIndex { !$0.isFuture } : nil
         let top = Self.scaleTop(best ?? 60)
         GeometryReader { proxy in
-            let plot = CGRect(x: 0, y: 14, width: proxy.size.width - 22, height: proxy.size.height - 30)
+            let plot = CGRect(x: 0, y: 14, width: proxy.size.width, height: proxy.size.height - 30)
             let slotWidth = plot.width / CGFloat(max(slots.count, 1))
             let y = { (wpm: Double) in plot.maxY - plot.height * wpm / top }
             ZStack(alignment: .topLeading) {
-                ForEach([top / 3, top * 2 / 3, top], id: \.self) { value in
-                    Path { $0.addLines([CGPoint(x: 0, y: y(value)), CGPoint(x: plot.maxX, y: y(value))]) }
-                        .stroke(.quaternary, lineWidth: 0.5)
-                    Text("\(Int(value))")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
-                        .position(x: proxy.size.width - 9, y: y(value))
-                }
                 ForEach(Array(slots.enumerated()), id: \.element.id) { index, slot in
                     let x = CGFloat(index) * slotWidth
                     let width = max(slotWidth - 4, 2)
@@ -53,15 +47,17 @@ struct SpeedColumns: View {
                             }
                             .frame(width: width, height: max(height, 2))
                             .position(x: x + slotWidth / 2, y: plot.maxY - height / 2)
-                        if isBest || isCurrent {
+                        // The "now" label gives way when it would collide with the fastest column's label.
+                        let nowFits = bestIndex.map { abs($0 - index) * Int(slotWidth) >= 44 } ?? true
+                        if isBest || (isCurrent && nowFits) {
                             Text(isBest ? Format.wpm(wpm) : "now \(Format.wpm(wpm))")
                                 .font(.system(size: 10, weight: isBest ? .semibold : .regular))
                                 .foregroundStyle(isBest ? .primary : .secondary)
                                 .fixedSize()
                                 .position(x: x + slotWidth / 2, y: y(wpm) - 8)
                         }
-                    } else if !slot.isFuture {
-                        Capsule().fill(.quaternary)
+                    } else {
+                        Capsule().fill(.quaternary).opacity(slot.isFuture ? 0.45 : 1)
                             .frame(width: width, height: 2)
                             .position(x: x + slotWidth / 2, y: plot.maxY - 1)
                     }
@@ -82,10 +78,9 @@ struct SpeedColumns: View {
         .monospacedDigit()
     }
 
-    /// A round top for the scale, a little above the fastest column.
+    /// The top of the plot: just above the fastest column, leaving room for its label.
     static func scaleTop(_ best: Double) -> Double {
-        let step = 30.0
-        return max(step, (best * 1.12 / step).rounded(.up) * step)
+        max(best * 1.18, 10)
     }
 
     /// Slots for a period: all 24 hours of today, or the period's days.

@@ -251,7 +251,6 @@ private struct SpeedTab: View {
             }
         }
         .padding(.top, 8)
-        Streak(tracker: tracker)
     }
 
     /// The live session's speed once it has a few words, else the last session.
@@ -394,7 +393,6 @@ private struct RecordsTab: View {
                 record("Most typing", Format.duration(day.totals.duration), detail: Format.day(day.day))
             }
         }
-        Streak(tracker: tracker)
     }
 
     private func row(_ label: String, _ value: String?, _ session: SessionRecord?, first: Bool = false) -> some View {
@@ -413,22 +411,6 @@ private struct RecordsTab: View {
                 Text(value).font(.callout.weight(.medium))
             }
             .padding(.vertical, 6)
-        }
-    }
-}
-
-private struct Streak: View {
-    let tracker: LiveTracker
-
-    var body: some View {
-        let _ = tracker.revision
-        let streaks = Statistics.streaks(tracker.allSessions(), today: .now, calendar: .current)
-        if streaks.longest > 0 {
-            Label("\(streaks.current)-day streak · best \(streaks.longest)", systemImage: "clock")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, 10)
-                .padding(.horizontal, 2)
         }
     }
 }
