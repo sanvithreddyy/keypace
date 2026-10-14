@@ -121,3 +121,61 @@ struct Bar: View {
         .frame(height: 2)
     }
 }
+
+/// One row of a breakdown: an app, keyboard or layout with its totals for the period.
+struct BreakdownRow: Identifiable {
+    let id: String
+    let title: String
+    var detail: String?
+    var icon: NSImage?
+    let totals: TypingTotals
+    /// Totals for the previous period, for the speed change.
+    var previous: TypingTotals?
+}
+
+/// Typing time, share, speed, change and corrections per row, most typing first.
+struct BreakdownTable<RowMenu: View>: View {
+    let heading: String
+    let rows: [BreakdownRow]
+    @ViewBuilder var menu: (BreakdownRow) -> RowMenu
+
+    var body: some View {
+        let total = max(rows.map(\.totals.duration).reduce(0, +), 1)
+        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
+            GridRow {
+                Text(heading)
+                Text("Typing time").gridColumnAlignment(.trailing)
+                Text("Share").gridColumnAlignment(.trailing)
+                Text("WPM").gridColumnAlignment(.trailing)
+                Text("Change").gridColumnAlignment(.trailing)
+                Text("Corrections").gridColumnAlignment(.trailing)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            Divider()
+            ForEach(rows) { row in
+                GridRow {
+                    HStack(spacing: 8) {
+                        if let icon = row.icon { Image(nsImage: icon).resizable().frame(width: 18, height: 18) }
+                        Text(row.title).lineLimit(1)
+                        if let detail = row.detail { Text(detail).foregroundStyle(.secondary).lineLimit(1) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(Format.duration(row.totals.duration))
+                    Text(Format.percent(row.totals.duration / total)).foregroundStyle(.secondary)
+                    Text(Format.wpm(row.totals.wpm))
+                    change(row.totals.wpm, row.previous?.wpm)
+                    Text(Format.percent(row.totals.correctionRate)).foregroundStyle(.secondary)
+                }
+                .contextMenu { menu(row) }
+            }
+        }
+        .monospacedDigit()
+    }
+
+    private func change(_ now: Double?, _ before: Double?) -> Text {
+        guard let now, let before else { return Text("–").foregroundStyle(.secondary) }
+        let change = now - before
+        return Text(Format.signed(change)).foregroundStyle(abs(change) < 0.5 ? .secondary : change > 0 ? Color.green : Color.red)
+    }
+}
