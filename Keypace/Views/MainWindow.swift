@@ -5,7 +5,8 @@ struct MainWindow: View {
     let tracker: LiveTracker
 
     enum Page: String, Hashable, CaseIterable {
-        case overview = "Overview", statistics = "Statistics", apps = "Apps", keys = "Keys", general = "General", tracking = "Tracking"
+        case overview = "Overview", statistics = "Statistics", apps = "Apps", keys = "Keys", records = "Records"
+        case keyboards = "Keyboards", layouts = "Layouts", general = "General", tracking = "Tracking"
     }
 
     @State private var page: Page?
@@ -22,6 +23,9 @@ struct MainWindow: View {
                 Text(Page.statistics.rawValue).tag(Page.statistics)
                 Text(Page.apps.rawValue).tag(Page.apps)
                 Text(Page.keys.rawValue).tag(Page.keys)
+                Text(Page.records.rawValue).tag(Page.records)
+                Text(Page.keyboards.rawValue).tag(Page.keyboards)
+                Text(Page.layouts.rawValue).tag(Page.layouts)
                 Section("Settings") {
                     Text(Page.general.rawValue).tag(Page.general)
                     Text(Page.tracking.rawValue).tag(Page.tracking)
@@ -41,6 +45,9 @@ struct MainWindow: View {
         case .statistics: StatisticsPage(tracker: tracker)
         case .apps: AppsPage(tracker: tracker)
         case .keys: KeysPage(tracker: tracker)
+        case .records: RecordsPage(tracker: tracker)
+        case .keyboards: KeyboardsPage(tracker: tracker)
+        case .layouts: LayoutsPage(tracker: tracker)
         case .general: GeneralSettingsPage(tracker: tracker)
         case .tracking: TrackingSettingsPage(tracker: tracker)
         }

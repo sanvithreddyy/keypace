@@ -19,6 +19,7 @@ enum SampleData {
     static let apps = ["com.tinyspeck.slackmacgap", "com.apple.Notes", "com.t3tools.t3code", "com.apple.mail", "com.apple.MobileSMS"]
     static let builtIn = KeyboardRecord(id: "1452:834", name: "Apple Internal Keyboard / Trackpad", isBuiltIn: true, lastSeen: .now)
     static let mxKeys = KeyboardRecord(id: "1133:50475", name: "MX Keys", isBuiltIn: false, lastSeen: .now)
+    static let british = InputSourceRecord(id: "com.apple.keylayout.British", name: "British", lastSeen: .now)
 
     /// - Returns: the tracker's clock, positioned at `end`.
     static func fill(_ tracker: LiveTracker, clock: TestClock, days: Int, endingAt end: Date) {
@@ -40,6 +41,7 @@ enum SampleData {
                 var typist = Typist(tracker: tracker, clock: clock)
                 typist.appID = apps[Int.random(in: 0..<apps.count, using: &generator)]
                 typist.keyboard = dayIndex % 3 == 0 ? mxKeys : builtIn
+                if dayIndex % 5 == 4 { typist.inputSource = british }
                 for _ in 0..<Int.random(in: 2...6, using: &generator) {
                     var text = sentences[Int.random(in: 0..<sentences.count, using: &generator)] + " "
                     if Double.random(in: 0...1, using: &generator) < 0.5 {
