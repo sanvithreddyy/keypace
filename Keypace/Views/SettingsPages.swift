@@ -9,12 +9,72 @@ struct GeneralSettingsPage: View {
     @State private var exportError: String?
     @State private var loginError: String?
     @AppStorage("menuBarFormat") private var menuBarFormat = MenuBarFormat.withUnit
+    @AppStorage("menuBarNumber") private var menuBarNumber = MenuBarNumber.liveThenToday
+
+    var body: some View {
+        SettingsPage(title: "General") {
+            SettingsSection("Speed") {
+                SettingsRow("New session after a pause of", value: "\(Int(tracker.inactivityTimeout)) s",
+                            description: "A longer pause ends the session; switching apps, keyboards or layouts does too.") {
+                    TickedSlider(value: $tracker.inactivityTimeout, range: 2...15, step: 1, low: "2 s", high: "15 s")
+                }
+                SettingsRow("Ignore sessions shorter than", value: "\(tracker.minimumCharacters) characters",
+                            description: "A few quick keystrokes can't swing your speed.") {
+                    TickedSlider(value: minimumCharacters, range: 5...100, step: 5, low: "5", high: "100")
+                }
+            }
+            SettingsSection("Menu bar") {
+                SettingsRow("Show") {
+                    Picker("Show", selection: $menuBarFormat) {
+                        ForEach(MenuBarFormat.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .segmentedStyle()
+                }
+                SettingsRow("Number", description: menuBarNumber.description) {
+                    Picker("Number", selection: $menuBarNumber) {
+                        ForEach(MenuBarNumber.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .segmentedStyle()
+                }
+                SettingsRow("Open at login", description: loginError) {
+                    Toggle("Open at login", isOn: launchAtLogin).toggleStyle(.switch).labelsHidden()
+                }
+            }
+            SettingsSection("Input from other software") {
+                SettingsRow("Ignore", description: filterDescription) {
+                    Picker("Ignore", selection: $tracker.syntheticStrength) {
+                        Text("Off").tag(SyntheticFilter.Strength.off)
+                        Text("Standard").tag(SyntheticFilter.Strength.normal)
+                        Text("Strict").tag(SyntheticFilter.Strength.strict)
+                    }
+                    .segmentedStyle()
+                }
+            }
+            SettingsSection("Data") {
+                SettingsRow("Export every session as CSV", description: exportError) {
+                    Button("Export…", action: export)
+                }
+                SettingsRow("Delete all typing history", description: "Removes every session and statistic from this Mac. This can't be undone.") {
+                    Button("Delete…", role: .destructive) { confirmingReset = true }
+                }
+            }
+        }
+        .confirmationDialog("Delete all typing history?", isPresented: $confirmingReset) {
+            Button("Delete All History", role: .destructive) { tracker.deleteAllHistory() }
+        } message: {
+            Text("This can't be undone.")
+        }
+    }
+
+    private var minimumCharacters: Binding<Double> {
+        Binding(get: { Double(tracker.minimumCharacters) }, set: { tracker.minimumCharacters = Int($0) })
+    }
 
     private var filterDescription: String {
         switch tracker.syntheticStrength {
         case .off: "Every keystroke counts, including ones sent by text expanders and automation."
-        case .normal: "Keystrokes sent by other apps, such as text expanders and automation, don't count toward your speed."
-        case .strict: "Also ignores keystrokes that arrive faster than a person can type."
+        case .normal: "Keystrokes sent by other apps, such as text expanders, don't count toward your speed."
+        case .strict: "Also drops keystrokes that arrive faster than a person can type."
         }
     }
 
@@ -30,51 +90,6 @@ struct GeneralSettingsPage: View {
                 }
             }
         )
-    }
-
-    var body: some View {
-        Form {
-            Section("Sessions") {
-                Stepper(value: $tracker.inactivityTimeout, in: 2...30, step: 1) {
-                    LabeledContent("End a session after", value: "\(Int(tracker.inactivityTimeout)) s without typing")
-                }
-                Stepper(value: $tracker.minimumCharacters, in: 1...200, step: 5) {
-                    LabeledContent("Save sessions with at least", value: "\(tracker.minimumCharacters) characters")
-                }
-            }
-            Section("Menu bar") {
-                Picker("Show", selection: $menuBarFormat) {
-                    ForEach(MenuBarFormat.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                Toggle("Open at login", isOn: launchAtLogin)
-                if let loginError { Text(loginError).foregroundStyle(.red) }
-            }
-            Section {
-                Picker("Ignore input from other software", selection: $tracker.syntheticStrength) {
-                    Text("Off").tag(SyntheticFilter.Strength.off)
-                    Text("Standard").tag(SyntheticFilter.Strength.normal)
-                    Text("Strict").tag(SyntheticFilter.Strength.strict)
-                }
-            } footer: {
-                Text(filterDescription).font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Data") {
-                LabeledContent("Export every session as CSV") {
-                    Button("Export…", action: export)
-                }
-                if let exportError { Text(exportError).foregroundStyle(.red) }
-                LabeledContent("Delete all typing history") {
-                    Button("Delete…", role: .destructive) { confirmingReset = true }
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("General")
-        .confirmationDialog("Delete all typing history?", isPresented: $confirmingReset) {
-            Button("Delete All History", role: .destructive) { tracker.deleteAllHistory() }
-        } message: {
-            Text("This can't be undone.")
-        }
     }
 
     private func export() {
@@ -93,42 +108,30 @@ struct GeneralSettingsPage: View {
 
 struct TrackingSettingsPage: View {
     @Bindable var tracker: LiveTracker
-    @State private var selection: String?
     @State private var offerDeletion: String?
 
     var body: some View {
-        Form {
-            Section {
-                Picker("Track", selection: $tracker.filter.mode) {
-                    Text("Every app except these").tag(AppFilter.Mode.allExcept)
-                    Text("Only these apps").tag(AppFilter.Mode.only)
-                }
-                .pickerStyle(.radioGroup)
-            }
-            Section {
-                if tracker.filter.appIDs.isEmpty {
-                    Text("No apps").foregroundStyle(.secondary)
-                } else {
-                    List(tracker.filter.appIDs, id: \.self, selection: $selection) { appID in
-                        HStack(spacing: 8) {
-                            if let icon = AppInfo.icon(appID) { Image(nsImage: icon).resizable().frame(width: 18, height: 18) }
-                            Text(AppInfo.name(appID))
-                        }
+        SettingsPage(title: "Tracking") {
+            SettingsSection("Apps") {
+                SettingsRow("Track", description: tracker.filter.mode == .allExcept
+                            ? "Typing in the apps below isn't recorded."
+                            : "Only typing in the apps below is recorded.") {
+                    Picker("Track", selection: $tracker.filter.mode) {
+                        Text("Every app except these").tag(AppFilter.Mode.allExcept)
+                        Text("Only these apps").tag(AppFilter.Mode.only)
                     }
-                    .frame(minHeight: 160)
+                    .segmentedStyle()
                 }
-                HStack {
+                ForEach(tracker.filter.appIDs, id: \.self) { appID in
+                    SettingsRow(AppInfo.name(appID), icon: AppInfo.icon(appID)) {
+                        Button("Remove") { tracker.filter.appIDs.removeAll { $0 == appID } }
+                    }
+                }
+                SettingsRow(tracker.filter.appIDs.isEmpty ? "No apps yet" : "Add another app") {
                     Button("Add App…", action: addApp)
-                    Button("Remove") {
-                        tracker.filter.appIDs.removeAll { $0 == selection }
-                        selection = nil
-                    }
-                    .disabled(selection == nil)
                 }
             }
         }
-        .formStyle(.grouped)
-        .navigationTitle("Tracking")
         .confirmationDialog(
             "Delete the typing history recorded in \(offerDeletion.map(AppInfo.name) ?? "")?",
             isPresented: Binding(get: { offerDeletion != nil }, set: { if !$0 { offerDeletion = nil } })
@@ -152,5 +155,121 @@ struct TrackingSettingsPage: View {
            tracker.allSessions().contains(where: { $0.appID == appID }) {
             offerDeletion = appID
         }
+    }
+}
+
+// MARK: Building blocks
+
+/// A scrolling settings page with a title.
+private struct SettingsPage<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title).font(.title2.weight(.semibold))
+                content
+            }
+            .padding(24)
+            .frame(maxWidth: 680, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .navigationTitle(title)
+    }
+}
+
+/// A titled group of rows on one rounded surface, with hairlines between rows.
+private struct SettingsSection<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.headline)
+            VStack(spacing: 0) {
+                Group(subviews: content) { rows in
+                    ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                        if index > 0 { Divider() }
+                        row
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .background(.white.opacity(0.05), in: .rect(cornerRadius: 12))
+        }
+        .padding(.top, 20)
+    }
+}
+
+/// Label on the left with a value or a small control on the right; a wide control such as a slider
+/// goes on its own line below. A plain description closes the row.
+private struct SettingsRow<Control: View>: View {
+    let title: String
+    var value: String?
+    var description: String?
+    var icon: NSImage?
+    @ViewBuilder var control: Control
+
+    init(_ title: String, value: String? = nil, description: String? = nil, icon: NSImage? = nil, @ViewBuilder control: () -> Control) {
+        self.title = title
+        self.value = value
+        self.description = description
+        self.icon = icon
+        self.control = control()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if let icon { Image(nsImage: icon).resizable().frame(width: 18, height: 18) }
+                Text(title)
+                Spacer(minLength: 12)
+                if let value {
+                    Text(value).foregroundStyle(.secondary).monospacedDigit()
+                } else {
+                    control
+                }
+            }
+            if value != nil { control }
+            if let description {
+                Text(description).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 11)
+    }
+}
+
+/// A slider with its end values written under each end.
+private struct TickedSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let low: String
+    let high: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Slider(value: $value, in: range, step: step).labelsHidden()
+            HStack {
+                Text(low)
+                Spacer()
+                Text(high)
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .monospacedDigit()
+        }
+    }
+}
+
+private extension View {
+    func segmentedStyle() -> some View {
+        pickerStyle(.segmented).labelsHidden().fixedSize()
     }
 }

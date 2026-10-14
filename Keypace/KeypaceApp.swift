@@ -29,10 +29,11 @@ struct KeypaceApp: App {
     }
 }
 
-/// Live session speed while typing, otherwise today's speed.
+/// Live session speed while typing (unless set to today only), otherwise today's speed.
 private struct MenuBarLabel: View {
     let tracker: LiveTracker
     @AppStorage("menuBarFormat") private var format = MenuBarFormat.withUnit
+    @AppStorage("menuBarNumber") private var number = MenuBarNumber.liveThenToday
 
     var body: some View {
         if tracker.status == .needsPermission {
@@ -45,7 +46,7 @@ private struct MenuBarLabel: View {
     }
 
     private var wpm: Double? {
-        if let current = tracker.current, current.duration >= 3, let wpm = current.totals.wpm { return wpm }
+        if number == .liveThenToday, let current = tracker.current, current.duration >= 3, let wpm = current.totals.wpm { return wpm }
         _ = tracker.revision
         return PeriodData(.today, tracker: tracker).totals.wpm
     }
