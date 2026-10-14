@@ -22,6 +22,13 @@ enum Format {
         return "\(total) s"
     }
 
+    /// "Oct 13", or "Oct 13, 2025" outside the current year.
+    static func day(_ date: Date) -> String {
+        Calendar.current.isDate(date, equalTo: .now, toGranularity: .year)
+            ? date.formatted(.dateTime.month(.abbreviated).day())
+            : date.formatted(.dateTime.month(.abbreviated).day().year())
+    }
+
     static func count(_ value: Int) -> String {
         value.formatted(.number.notation(.compactName))
     }
