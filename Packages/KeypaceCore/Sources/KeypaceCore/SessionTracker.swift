@@ -24,8 +24,10 @@ public struct SessionTracker: Sendable {
     /// The last typing event in the open session; cleared by other keys and by editing.
     private var lastTyping: (keyCode: UInt16, time: Double, isCharacter: Bool)?
 
-    private static let returnKeyCode: UInt16 = 36
+    private static let lineBreaks: Set<UInt16> = [36, 76] // Return, keypad Enter
     private static let spaceKeyCode: UInt16 = 49
+    /// Stands in for a held-key repeat in `typedKeys`.
+    private static let uncounted = UInt16.max
 
     public init(inactivityTimeout: Double = 5, minimumCharacters: Int = 10) {
         self.inactivityTimeout = inactivityTimeout
@@ -42,9 +44,13 @@ public struct SessionTracker: Sendable {
         switch press.kind {
         case .other:
             if !press.isRepeat { current?.keystrokes += 1 }
-            lastTyping = nil
+            // Navigation and shortcuts may move the cursor, so what's before it is no longer known to be yours.
+            cursorMoved()
+        case .character where press.isRepeat:
+            // A held key types more characters. They aren't counted, but deleting them mustn't be charged
+            // to the characters typed before them.
+            if current != nil { typedKeys.append(Self.uncounted) }
         case .character:
-            guard !press.isRepeat else { break }
             var session = open(in: context, at: press.time)
             session.characters += 1
             session.keystrokes += 1
@@ -82,6 +88,17 @@ public struct SessionTracker: Sendable {
             current = session
         }
         return closed
+    }
+
+    /// Forgets which text before the cursor was typed in this session, e.g. after a mouse click.
+    public mutating func cursorMoved() {
+        typedKeys = []
+        lastTyping = nil
+    }
+
+    /// Clears live speed, e.g. when capture stops.
+    public mutating func resetLive() {
+        live.reset()
     }
 
     /// Closes the open session if nothing has been typed for longer than the timeout.
@@ -129,19 +146,19 @@ public struct SessionTracker: Sendable {
         }
     }
 
-    /// Removes the characters a delete removes from the session's typed keys and returns them.
+    /// Removes the characters a delete removes from the session's typed keys and returns the counted ones.
     private mutating func removeTyped(_ kind: KeyPress.Kind) -> [UInt16] {
         var removed: [UInt16] = []
         func pop() { if let key = typedKeys.popLast() { removed.append(key) } }
         switch kind {
         case .deleteWord:
             while typedKeys.last == Self.spaceKeyCode { pop() }
-            while let key = typedKeys.last, key != Self.spaceKeyCode, key != Self.returnKeyCode { pop() }
+            while let key = typedKeys.last, key != Self.spaceKeyCode, !Self.lineBreaks.contains(key) { pop() }
         case .deleteLine:
-            while let key = typedKeys.last, key != Self.returnKeyCode { pop() }
+            while let key = typedKeys.last, !Self.lineBreaks.contains(key) { pop() }
         default:
             pop()
         }
-        return removed
+        return removed.filter { $0 != Self.uncounted }
     }
 }

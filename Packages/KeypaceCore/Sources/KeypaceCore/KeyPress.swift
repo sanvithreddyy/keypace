@@ -30,6 +30,7 @@ public struct KeyPress: Sendable, Equatable {
 
 public enum KeyClassifier {
     public static let backspaceKeyCode: UInt16 = 51
+    public static let keypadEnterKeyCode: UInt16 = 76
 
     /// - Parameters:
     ///   - commandOrControl: Command or Control is held; shortcuts aren't typing.
@@ -43,6 +44,8 @@ public enum KeyClassifier {
             return option ? .deleteWord : .backspace
         }
         if commandOrControl { return .other }
+        // Keypad Enter types a line break, though AppKit reports it as a control character.
+        if keyCode == keypadEnterKeyCode { return .character }
         guard !text.isEmpty else { return .other }
         for scalar in text.unicodeScalars {
             switch scalar.value {

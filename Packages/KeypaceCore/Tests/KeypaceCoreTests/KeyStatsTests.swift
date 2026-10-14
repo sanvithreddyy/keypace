@@ -116,3 +116,61 @@ struct ShortcutTests {
         #expect(session.pairs.isEmpty)
     }
 }
+
+struct OwnershipTests {
+    private let app = TypingContext(appID: "a")
+
+    private func run(_ steps: (inout SessionTracker) -> Void) throws -> TypingSession {
+        var tracker = SessionTracker(minimumCharacters: 1)
+        steps(&tracker)
+        let ended = tracker.end()
+        return try #require(ended)
+    }
+
+    @Test func `after the cursor moves, deleting older text isn't a correction`() throws {
+        let session = try run { tracker in
+            _ = tracker.record(KeyPress(time: 0, keyCode: 0, kind: .character), in: app)
+            _ = tracker.record(KeyPress(time: 0.2, keyCode: 11, kind: .character), in: app)
+            _ = tracker.record(KeyPress(time: 0.4, keyCode: 123, kind: .other), in: app) // ←
+            _ = tracker.record(KeyPress(time: 0.6, keyCode: 51, kind: .backspace), in: app)
+        }
+        #expect(session.deletions == 0)
+        #expect(session.backspaces == 1)
+        #expect(session.totals.netCharacters == 2)
+    }
+
+    @Test func `a mouse click also forgets which text was typed`() throws {
+        let session = try run { tracker in
+            _ = tracker.record(KeyPress(time: 0, keyCode: 0, kind: .character), in: app)
+            _ = tracker.record(KeyPress(time: 0.2, keyCode: 11, kind: .character), in: app)
+            tracker.cursorMoved()
+            _ = tracker.record(KeyPress(time: 0.6, keyCode: 51, kind: .backspace), in: app)
+        }
+        #expect(session.deletions == 0)
+    }
+
+    @Test func `deleting held-key repeats doesn't charge the characters before them`() throws {
+        let session = try run { tracker in
+            _ = tracker.record(KeyPress(time: 0, keyCode: 0, kind: .character), in: app) // a
+            _ = tracker.record(KeyPress(time: 0.2, keyCode: 11, kind: .character), in: app) // b
+            _ = tracker.record(KeyPress(time: 0.5, keyCode: 11, kind: .character, isRepeat: true), in: app)
+            _ = tracker.record(KeyPress(time: 0.55, keyCode: 11, kind: .character, isRepeat: true), in: app)
+            _ = tracker.record(KeyPress(time: 0.8, keyCode: 51, kind: .backspace), in: app)
+            _ = tracker.record(KeyPress(time: 1.0, keyCode: 51, kind: .backspace), in: app)
+        }
+        #expect(session.characters == 2)
+        #expect(session.deletions == 0)
+        #expect(session.keys[11]?.corrections == 0)
+    }
+
+    @Test func `keypad enter is a line break for command-delete`() throws {
+        #expect(KeyClassifier.kind(keyCode: 76, commandOrControl: false, text: "\u{3}") == .character)
+        let session = try run { tracker in
+            for (i, key) in [UInt16(0), 11, 76, 8, 2].enumerated() {
+                _ = tracker.record(KeyPress(time: Double(i) * 0.2, keyCode: key, kind: .character), in: app)
+            }
+            _ = tracker.record(KeyPress(time: 1.0, keyCode: 51, kind: .deleteLine), in: app)
+        }
+        #expect(session.deletions == 2)
+    }
+}
