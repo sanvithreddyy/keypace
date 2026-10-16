@@ -26,6 +26,9 @@ patterns in the background and keeps everything on this Mac.
      each keystroke is tied to the physical keyboard it came from.
    - Context: frontmost app, input source (layout), keyboard, sleep/wake,
      secure input.
+   - Listener pauses by macOS and unreadable key-downs are counted in local
+     preferences, with the date counting began and the most recent occurrence.
+     Presses during a pause can't be counted.
 2. Sessions and metrics
    - A session ends after N seconds without a keystroke (default 5) or when
      the frontmost app, keyboard or layout changes.
@@ -34,6 +37,13 @@ patterns in the background and keeps everything on this Mac.
      gap for that key pair, key or overall, clamped to 250 ms–3 s (600 ms before
      there's history). A burst's first keystroke gets one median gap.
    - WPM = characters that stayed ÷ 5 per minute of typing time; CPM; KPM.
+     Historical speed metrics, including KPM, use saved sessions.
+   - Keystrokes and per-key usage count every accepted key-down, including short
+     bursts, shortcuts and navigation outside sessions. Held-key repeats,
+     modifier-only presses, software-sent keys and excluded apps don't count.
+     Counts are hourly by app, keyboard, layout and key; overlapping hours count
+     in full. Before the first stored press hour, use saved sessions' character-key
+     and Delete presses, with no backfill.
    - Deletions count only when they remove characters typed in the session;
      Option-Delete uses transient character categories to estimate the word;
      Command-Delete is editing and clears ownership because visual line wrapping
@@ -68,7 +78,8 @@ patterns in the background and keeps everything on this Mac.
 11. Live Metrics: floating always-on-top window with speed as you type,
     opened from the main window's toolbar.
 12. Settings: inactivity timeout, minimum session size, tracking mode (every
-    app except a list, or only a list), menu-bar format, launch at login.
+    app except a list, or only a list), menu-bar format, launch at login, and
+    a Capture row with listener pauses, unreadable key events and their dates.
 13. Data: CSV export, delete one app's history, delete everything.
 
 ## Not planned

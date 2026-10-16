@@ -59,7 +59,8 @@ The app tests compile the app's code into the test bundle and run it with
 | --- | --- |
 | WPM | characters that stayed (typed minus deleted again) ÷ 5, per minute of typing time |
 | CPM | characters that stayed, per minute of typing time |
-| KPM | physical key presses per minute of typing time |
+| Keystrokes | every key press while Keypace is listening, except held-key repeats, modifier-only presses, software-sent keys and excluded apps |
+| KPM | key presses within saved sessions, per minute of typing time |
 | Corrections | characters deleted again ÷ characters typed |
 
 Typing time leaves out pauses. Each gap between keystrokes counts as typing
@@ -69,9 +70,13 @@ overall), kept between 250 ms and 3 s; before there's any history, gaps up to
 short bursts aren't overstated.
 
 A session ends after 5 seconds without typing, or when you switch apps,
-keyboards or layouts. Sessions under 25 characters are discarded. Both limits
-are adjustable in Settings. Combined figures weight each session by its typing
-time.
+keyboards or layouts. Sessions under 25 characters are discarded, but their
+presses still count. Both limits are adjustable in Settings. Combined speed
+figures weight each session by its typing time.
+
+All-press counting begins with this version. Earlier periods use saved sessions'
+character-key and Delete presses; older data is not backfilled. New press counts
+are stored by hour, and an hour counts whenever it overlaps the selected range.
 
 Deletions only count when they remove characters typed in the same session
 and still right before the cursor; deleting text that was already there, or
@@ -84,7 +89,9 @@ deliberate rewrites, so the app calls them corrections rather than accuracy.
 Each deletion is charged to the key whose character it removed. Key-pair
 timings cover consecutive characters whose gap counted as typing. Finger
 statistics assume touch-typing finger assignments. Shortcuts and navigation
-keys count as keystrokes but not per key.
+keys count toward keystrokes and per-key usage, even outside sessions.
+Modifier-only presses don't produce key-down events and aren't counted.
+Corrections, key-pair timings and all speed metrics stay session-based.
 
 The live number covers events in the last 8 seconds, using the same pause-filtered
 typing time as saved sessions, and clears 2 seconds after you stop.
@@ -101,13 +108,18 @@ process; anything else (text expanders, automation, scripted typing) is counted
 separately as filtered input. Paste and AI autocomplete insert text without
 keystrokes, so they never count toward speed.
 
+General Settings has a Capture row showing recorded listener pauses by macOS,
+key events that couldn't be read, and the most recent occurrence, since this
+version first launched. Presses during a pause can't be counted.
+
 ## Privacy
 
 Keypace listens to key events without blocking or changing them. It classifies
 each press as a character, a deletion or another key, then discards the
 character. The database (`~/Library/Application Support/Keypace/typing.sqlite`)
 holds session times, app, keyboard and layout identifiers, per-session key and
-key-pair counts, hourly counts of filtered input, and each layout's key labels.
+key-pair counts, hourly press and filtered-input counts, and each layout's key labels.
+Capture issue counts and dates are kept in local preferences.
 Nothing leaves the Mac.
 
 ## Layout
