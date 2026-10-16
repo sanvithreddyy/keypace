@@ -18,9 +18,14 @@ struct ObservedKey {
 
 /// Passive, listen-only keyboard tap. Needs Input Monitoring.
 final class KeyboardMonitor {
+    private let health: CaptureHealth
     private var tap: CFMachPort?
     private var onKey: (ObservedKey) -> Void = { _ in }
     private var onClick: () -> Void = {}
+
+    init(health: CaptureHealth) {
+        self.health = health
+    }
 
     static var hasPermission: Bool { CGPreflightListenEventAccess() }
 
@@ -67,11 +72,17 @@ final class KeyboardMonitor {
     private func handle(type: CGEventType, event: CGEvent) {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            if let tap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+                health.record(.listenerPaused)
+            }
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             onClick()
         case .keyDown:
-            guard let nsEvent = NSEvent(cgEvent: event) else { return }
+            guard let nsEvent = NSEvent(cgEvent: event) else {
+                health.record(.unreadableKey)
+                return
+            }
             let flags = event.flags
             onKey(ObservedKey(
                 keyCode: UInt16(event.getIntegerValueField(.keyboardEventKeycode)),

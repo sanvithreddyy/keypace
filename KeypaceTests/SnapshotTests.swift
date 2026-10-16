@@ -42,6 +42,13 @@ struct SnapshotTests {
         }
     }
 
+    @Test func `capture issues in settings`() throws {
+        tracker.captureHealth.record(.listenerPaused)
+        tracker.captureHealth.record(.listenerPaused)
+        tracker.captureHealth.record(.unreadableKey)
+        try render(GeneralSettingsPage(tracker: tracker), size: CGSize(width: 780, height: 1000), name: "page-general-capture-issues")
+    }
+
     @Test func `live metrics`() throws {
         try renderMetrics(name: "live-metrics")
     }

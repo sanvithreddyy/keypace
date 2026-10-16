@@ -51,6 +51,7 @@ final class LiveTracker {
 
     let store: SessionStore?
     let inputSources: InputSources?
+    let captureHealth: CaptureHealth
     private let devices: KeyboardDevices?
     private var engine: SessionTracker
     private var synthetic: SyntheticFilter
@@ -74,7 +75,7 @@ final class LiveTracker {
     /// Keyboards and layouts typed on since the last save.
     private var seenKeyboards: [String: KeyboardRecord] = [:]
     private var seenInputSources: [String: InputSourceRecord] = [:]
-    private let monitor = KeyboardMonitor()
+    private let monitor: KeyboardMonitor
     private let defaults: UserDefaults
     private let clock: Clock
     private var timer: Timer?
@@ -92,6 +93,9 @@ final class LiveTracker {
         self.store = store
         self.defaults = defaults
         self.clock = clock
+        let health = CaptureHealth(defaults: defaults, now: clock.now)
+        captureHealth = health
+        monitor = KeyboardMonitor(health: health)
         let timeout = defaults.object(forKey: Keys.inactivityTimeout) as? Double ?? 5
         let minimum = defaults.object(forKey: Keys.minimumCharacters) as? Int ?? 25
         let strength = defaults.string(forKey: Keys.syntheticStrength).flatMap(SyntheticFilter.Strength.init) ?? .normal

@@ -50,6 +50,9 @@ struct GeneralSettingsPage: View {
                     .segmentedStyle()
                 }
             }
+            SettingsSection("Capture") {
+                SettingsRow("Listener", description: captureDescription) { EmptyView() }
+            }
             SettingsSection("Data") {
                 SettingsRow("Export every session as CSV", description: exportError) {
                     Button("Export…", action: export)
@@ -68,6 +71,20 @@ struct GeneralSettingsPage: View {
 
     private var minimumCharacters: Binding<Double> {
         Binding(get: { Double(tracker.minimumCharacters) }, set: { tracker.minimumCharacters = Int($0) })
+    }
+
+    private var captureDescription: String {
+        let health = tracker.captureHealth
+        let since = health.startedAt.formatted(date: .abbreviated, time: .omitted)
+        let summary: String
+        if let last = health.lastOccurrence {
+            let pauses = health.listenerPauses
+            let unreadable = health.unreadableKeys
+            summary = "Since \(since), macOS paused the listener \(pauses) \(pauses == 1 ? "time" : "times") and \(unreadable) key \(unreadable == 1 ? "event couldn't" : "events couldn't") be read. Last occurrence: \(last.formatted(date: .abbreviated, time: .shortened))."
+        } else {
+            summary = "No capture issues recorded since \(since)."
+        }
+        return summary + " Presses during a pause can't be counted."
     }
 
     private var filterDescription: String {
