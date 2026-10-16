@@ -45,25 +45,27 @@ permission, copy `Config/Signing.local.example.xcconfig` to
 
 ## Release
 
-Requires a paid Apple Developer membership. Create a **Developer ID Application**
-certificate in Xcode → Settings → Accounts → Manage Certificates. Store
-notarization credentials once in Terminal:
+```sh
+KEYPACE_SIGN_IDENTITY="Apple Development" scripts/release.sh --no-notarize
+```
+
+The signed DMG lands at `build/release/Keypace-<version>.dmg`. It isn't
+notarized, so on another Mac the first launch is blocked: open Keypace once,
+then choose **Open Anyway** in System Settings → Privacy & Security. Each new
+version needs this once, and Input Monitoring must be granted on each Mac.
+
+To ship a notarized DMG instead, which needs a paid Apple Developer membership:
+create a **Developer ID Application** certificate in Xcode → Settings → Accounts →
+Manage Certificates, store notarization credentials once in Terminal, then run
+`scripts/release.sh` without arguments.
 
 ```sh
 xcrun notarytool store-credentials keypace --apple-id <email> --team-id <team> --password <app-specific-password>
 ```
 
-Set `DEVELOPMENT_TEAM` in `Config/Signing.local.xcconfig` (or `KEYPACE_TEAM_ID`), then:
-
-```sh
-scripts/release.sh
-```
-
-The signed, notarized and stapled DMG lands at `build/release/Keypace-<version>.dmg`.
+Set `DEVELOPMENT_TEAM` in `Config/Signing.local.xcconfig` (or `KEYPACE_TEAM_ID`).
 `KEYPACE_SIGN_IDENTITY` defaults to `Developer ID Application` and
-`KEYPACE_NOTARY_PROFILE` to `keypace`. For a local build with a development
-certificate, use `KEYPACE_SIGN_IDENTITY="Apple Development" scripts/release.sh --no-notarize`.
-Grant Input Monitoring after first launch on each Mac.
+`KEYPACE_NOTARY_PROFILE` to `keypace`.
 
 ## Test
 
