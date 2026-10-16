@@ -43,6 +43,28 @@ signature, so an ad hoc build asks again after every rebuild. To keep the
 permission, copy `Config/Signing.local.example.xcconfig` to
 `Config/Signing.local.xcconfig` and fill in your signing identity.
 
+## Release
+
+Requires a paid Apple Developer membership. Create a **Developer ID Application**
+certificate in Xcode → Settings → Accounts → Manage Certificates. Store
+notarization credentials once in Terminal:
+
+```sh
+xcrun notarytool store-credentials keypace --apple-id <email> --team-id <team> --password <app-specific-password>
+```
+
+Set `DEVELOPMENT_TEAM` in `Config/Signing.local.xcconfig` (or `KEYPACE_TEAM_ID`), then:
+
+```sh
+scripts/release.sh
+```
+
+The signed, notarized and stapled DMG lands at `build/release/Keypace-<version>.dmg`.
+`KEYPACE_SIGN_IDENTITY` defaults to `Developer ID Application` and
+`KEYPACE_NOTARY_PROFILE` to `keypace`. For a local build with a development
+certificate, use `KEYPACE_SIGN_IDENTITY="Apple Development" scripts/release.sh --no-notarize`.
+Grant Input Monitoring after first launch on each Mac.
+
 ## Test
 
 ```sh

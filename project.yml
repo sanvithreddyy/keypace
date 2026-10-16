@@ -36,6 +36,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sanvith.keypace
         MARKETING_VERSION: "0.1"
+      configs:
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
   KeypaceTests:
     type: bundle.unit-test
     platform: macOS
