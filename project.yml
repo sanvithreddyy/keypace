@@ -36,6 +36,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sanvith.keypace
         MARKETING_VERSION: "0.1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
         Release:
           ENABLE_HARDENED_RUNTIME: YES
@@ -46,7 +47,7 @@ targets:
     sources:
       - KeypaceTests
       - path: Keypace
-        excludes: [KeypaceApp.swift, Info.plist]
+        excludes: [KeypaceApp.swift, Info.plist, Assets.xcassets]
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig
