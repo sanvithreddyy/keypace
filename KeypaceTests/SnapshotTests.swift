@@ -32,6 +32,16 @@ struct SnapshotTests {
         try render(MainWindow.detail(for: .overview, tracker: tracker), size: CGSize(width: 780, height: 900), name: "page-overview-today")
     }
 
+    @Test func `press history without saved sessions`() throws {
+        let tracker = try makeTracker(clock: clock, minimumCharacters: nil)
+        Typist(tracker: tracker, clock: clock).type("quick reply")
+        tracker.endSession()
+        #expect(tracker.allSessions().isEmpty)
+        for page in [MainWindow.Page.keys, .overview] {
+            try render(MainWindow.detail(for: page, tracker: tracker), size: CGSize(width: 780, height: 900), name: "page-\(page)-short-burst")
+        }
+    }
+
     @Test func `live metrics`() throws {
         try renderMetrics(name: "live-metrics")
     }

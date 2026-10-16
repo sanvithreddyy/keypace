@@ -11,18 +11,20 @@ struct OverviewPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 PageHeader(title: "Overview", period: $period).padding(.bottom, 16)
-                if data.sessions.isEmpty {
+                if data.sessions.isEmpty && data.presses == 0 {
                     Text(period == .today ? "No typing recorded today." : "No typing recorded in this period.")
                         .foregroundStyle(.secondary)
                 } else {
                     StatRow(data: data, streaks: streaks)
-                    SectionHeading(title: period == .today ? "Speed by hour" : "Speed by day",
-                                   detail: data.previousSessions == nil ? nil : "This period in full ink, the previous one in gray")
-                    SpeedChart(data: data)
-                    SectionHeading(title: "When you type fastest", detail: "Average wpm by weekday and hour")
-                    WeekHourHeatmap(sessions: data.sessions)
-                    SectionHeading(title: "Apps", detail: "Typing time · wpm")
-                    AppBars(apps: Array(Statistics.byApp(data.sessions).prefix(5)))
+                    if !data.sessions.isEmpty {
+                        SectionHeading(title: period == .today ? "Speed by hour" : "Speed by day",
+                                       detail: data.previousSessions == nil ? nil : "This period in full ink, the previous one in gray")
+                        SpeedChart(data: data)
+                        SectionHeading(title: "When you type fastest", detail: "Average wpm by weekday and hour")
+                        WeekHourHeatmap(sessions: data.sessions)
+                        SectionHeading(title: "Apps", detail: "Typing time · wpm")
+                        AppBars(apps: Array(Statistics.byApp(data.sessions).prefix(5)))
+                    }
                 }
             }
             .padding(24)
@@ -62,9 +64,9 @@ private struct StatRow: View {
                     (Format.signed((now.duration - $0.duration) / 60) + " min", .neutral)
                 })
                 Divider()
-                block("Keystrokes", Format.count(now.keystrokes), change: before.flatMap { before in
-                    before.keystrokes > 0
-                        ? (Format.signed(Double(now.keystrokes - before.keystrokes) / Double(before.keystrokes) * 100) + "%", .neutral)
+                block("Keystrokes", Format.count(data.presses), change: data.previousPresses.flatMap { before in
+                    before > 0
+                        ? (Format.signed(Double(data.presses - before) / Double(before) * 100) + "%", .neutral)
                         : nil
                 })
                 Divider()

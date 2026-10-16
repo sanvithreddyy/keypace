@@ -252,7 +252,7 @@ private struct SpeedTab: View {
             .padding(.bottom, 6)
             Bar(fraction: (totals.correctionRate ?? 0) / 0.1, emphasized: true).padding(.bottom, 8)
             PanelRow(label: "Typing time", value: Format.duration(totals.duration))
-            PanelRow(label: "Keystrokes", value: totals.keystrokes.formatted())
+            PanelRow(label: "Keystrokes", value: data.presses.formatted())
             if let interval = data.interval {
                 PanelRow(label: "Filtered input", value: tracker.syntheticCount(in: interval).formatted())
             }
@@ -295,10 +295,11 @@ private struct KeysTab: View {
 
     var body: some View {
         let keys = data.interval.map { tracker.keyStats(in: $0) } ?? [:]
+        let presses = (data.interval.map { tracker.pressCounts(in: $0) } ?? [:]).mapValues { KeyCount(presses: $0) }
         let pairs = data.interval.map { tracker.pairStats(in: $0) } ?? [:]
-        let fingers = FingerStats(keys: keys, pairs: pairs)
+        let fingers = FingerStats(keys: presses, pairs: pairs)
         PanelHeader(title: "Keys") { PeriodPicker(period: $period) }
-        if keys.isEmpty {
+        if presses.isEmpty {
             Panel { Text("No key presses yet.").foregroundStyle(.secondary).font(.callout) }
         } else {
             Panel {
@@ -306,7 +307,7 @@ private struct KeysTab: View {
                     Tile(title: "Left hand", value: Format.percent(fingers.leftShare, decimals: 0),
                          detail: Text("\(Format.percent(fingers.rightShare, decimals: 0)) right hand"))
                     Tile(title: "Home row", value: Format.percent(fingers.homeRowShare, decimals: 0),
-                         detail: Text("of letter presses"))
+                         detail: Text("of letter-area presses"))
                 }
                 chips("Most corrected keys", correctedKeys(keys))
                 chips("Slowest pairs", slowPairs(pairs))

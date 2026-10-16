@@ -60,6 +60,7 @@ struct PipelineTests {
 
         #expect(tracker.allSessions().isEmpty)
         #expect(tracker.syntheticCount(in: DateInterval(start: .distantPast, end: .distantFuture)) == 21)
+        #expect(tracker.pressCounts(in: history).isEmpty)
     }
 
     @Test func `excluded apps are not recorded`() throws {
@@ -70,6 +71,8 @@ struct PipelineTests {
         typist.type("correct horse battery staple")
         typist.pause()
         #expect(tracker.allSessions().isEmpty)
+        tracker.endSession()
+        #expect(tracker.pressCounts(in: history).isEmpty)
     }
 
     @Test func `switching keyboards or apps starts a new session`() throws {
@@ -96,6 +99,7 @@ struct PipelineTests {
         let data = PeriodData(.today, tracker: tracker, now: clock.date)
         #expect(data.sessions.count == 1)
         #expect(data.totals.characters == 43)
+        #expect(data.presses == 43)
     }
 
     @Test func `deleting an app's history also drops its unsaved typing`() throws {
@@ -111,6 +115,7 @@ struct PipelineTests {
         #expect(tracker.allSessions().isEmpty)
         #expect(tracker.keyStats(in: DateInterval(start: .distantPast, end: .distantFuture)).isEmpty)
         #expect(tracker.syntheticCount(in: DateInterval(start: .distantPast, end: .distantFuture)) == 0)
+        #expect(tracker.pressCounts(in: history).isEmpty)
     }
 
     @Test func `filtered input is dated when it arrives`() throws {
@@ -234,12 +239,136 @@ struct PipelineTests {
         #expect(tracker.allSessions().count == 1)
     }
 
-    @Test func `a fresh install ignores sessions under 25 characters`() throws {
+    @Test func `a short burst counts presses without saving a session`() throws {
         let tracker = try makeTracker(clock: clock, minimumCharacters: nil)
         #expect(tracker.minimumCharacters == 25)
         let typist = Typist(tracker: tracker, clock: clock)
         typist.type("quick burst of text")
         typist.pause()
         #expect(tracker.allSessions().isEmpty)
+        tracker.endSession()
+        #expect(tracker.pressCounts(in: history).values.reduce(0, +) == 19)
+        #expect(tracker.keyStats(in: history).isEmpty)
+        #expect(tracker.keyboards().map(\.id) == ["1452:834"])
+        #expect(tracker.inputSourceRecords().map(\.id) == ["com.apple.keylayout.US"])
+    }
+
+    @Test func `shortcuts navigation and other key-downs count without an open session`() throws {
+        let tracker = try makeTracker(clock: clock)
+        press(8, to: tracker, command: true)
+        for code: UInt16 in [123, 124, 125, 126, 53, 122, 51, 36] { press(code, to: tracker) }
+        tracker.endSession()
+        #expect(tracker.allSessions().isEmpty)
+        #expect(tracker.pressCounts(in: history) == [8: 1, 123: 1, 124: 1, 125: 1, 126: 1, 53: 1, 122: 1, 51: 1, 36: 1])
+    }
+
+    @Test(arguments: [UInt16(0), 51, 123, 36])
+    func `held-key repeats never add presses`(code: UInt16) throws {
+        let tracker = try makeTracker(clock: clock)
+        press(code, to: tracker)
+        for _ in 0..<3 { press(code, to: tracker, isRepeat: true) }
+        tracker.endSession()
+        #expect(tracker.pressCounts(in: history) == [code: 1])
+    }
+
+    @Test(arguments: ["session save", "endSession", "60 ticks"])
+    func `pending presses flush at each save boundary`(boundary: String) throws {
+        let tracker = try makeTracker(clock: clock, minimumCharacters: nil)
+        let typist = Typist(tracker: tracker, clock: clock)
+        typist.type("abc")
+        #expect(try tracker.store?.pressCounts(in: history).isEmpty == true)
+        var expected = 3
+        switch boundary {
+        case "session save":
+            typist.type(String(repeating: "a", count: 25))
+            typist.pause()
+            expected = 28
+            #expect(tracker.allSessions().count == 1)
+        case "endSession":
+            tracker.endSession()
+        default:
+            for _ in 0..<59 { clock.advance(1); tracker.tick() }
+            #expect(try tracker.store?.pressCounts(in: history).isEmpty == true)
+            clock.advance(1)
+            tracker.tick()
+        }
+        #expect(try tracker.store?.pressCounts(in: history).values.reduce(0, +) == expected)
+        tracker.endSession()
+        tracker.endSession()
+        #expect(tracker.pressCounts(in: history).values.reduce(0, +) == expected)
+    }
+
+    @Test func `deleting an app removes pending and stored presses for only that app`() throws {
+        let tracker = try makeTracker(clock: clock)
+        var typist = Typist(tracker: tracker, clock: clock)
+        typist.type("aaa")
+        tracker.endSession()
+        typist.appID = "com.apple.mail"
+        typist.type("bbb")
+        tracker.endSession()
+        typist.type("bb")
+        typist.appID = "com.apple.Notes"
+        typist.type("aa")
+        tracker.deleteHistory(appID: "com.apple.Notes")
+        tracker.endSession()
+        #expect(tracker.pressCounts(in: history) == [USKeys.code(for: "b"): 5])
+        #expect(tracker.pressCounts(in: history, filter: StatFilter(appID: "com.apple.Notes")).isEmpty)
+        #expect(tracker.pressCounts(in: history, filter: StatFilter(appID: "com.apple.mail")).values.reduce(0, +) == 5)
+    }
+
+    @Test func `deleting all history clears pending and stored presses`() throws {
+        let tracker = try makeTracker(clock: clock)
+        let typist = Typist(tracker: tracker, clock: clock)
+        typist.type("abc")
+        tracker.endSession()
+        typist.type("def")
+        tracker.deleteAllHistory()
+        tracker.endSession()
+        #expect(tracker.pressCounts(in: history).isEmpty)
+    }
+
+    @Test func `presses retain the hour app keyboard and layout seen on arrival`() throws {
+        let tracker = try makeTracker(clock: clock)
+        var typist = Typist(tracker: tracker, clock: clock)
+        let firstHour = Hour.index(clock.date)
+        typist.type("aa")
+        clock.advance(3600)
+        typist.appID = "com.apple.mail"
+        typist.keyboard = SampleData.mxKeys
+        typist.inputSource = SampleData.british
+        typist.type("bbb")
+        tracker.endSession()
+        let first = DateInterval(start: Date(timeIntervalSince1970: Double(firstHour) * 3600), duration: 3600)
+        #expect(tracker.pressCounts(in: first) == [USKeys.code(for: "a"): 2])
+        #expect(tracker.pressCounts(in: history, filter: StatFilter(appID: "com.apple.mail", keyboardID: SampleData.mxKeys.id, inputSourceID: SampleData.british.id)) == [USKeys.code(for: "b"): 3])
+    }
+
+    @Test func `all-time and comparison press totals include short bursts`() throws {
+        let tracker = try makeTracker(clock: clock, minimumCharacters: nil)
+        let now = clock.date
+        clock.date = now.addingTimeInterval(-86_400)
+        let typist = Typist(tracker: tracker, clock: clock)
+        typist.type("abc")
+        tracker.endSession()
+        clock.date = now
+        typist.type("abcdef")
+        tracker.endSession()
+        let today = PeriodData(.today, tracker: tracker, now: now)
+        #expect(today.sessions.isEmpty)
+        #expect(today.presses == 6)
+        #expect(today.previousPresses == 3)
+        let all = PeriodData(.allTime, tracker: tracker, now: now)
+        #expect(all.interval != nil)
+        #expect(all.presses == 9)
+        #expect(all.previousPresses == nil)
+    }
+
+    private var history: DateInterval { DateInterval(start: .distantPast, end: .distantFuture) }
+
+    private func press(_ code: UInt16, to tracker: LiveTracker, isRepeat: Bool = false, command: Bool = false) {
+        clock.advance(0.2)
+        tracker.handle(ObservedKey(keyCode: code, time: clock.uptime, text: "", commandOrControl: command,
+                                   command: command, option: false, isRepeat: isRepeat, sourceStateID: 1, sourceProcessID: 0),
+                       appID: "com.apple.Notes", keyboard: nil, inputSource: nil)
     }
 }

@@ -56,6 +56,16 @@ final class LiveTracker {
     private var synthetic: SyntheticFilter
     /// Synthetic presses not yet written, per hour received and app.
     private var pendingSynthetic: [SyntheticBucket: Int] = [:]
+    /// Accepted physical presses, independent of whether a session is saved.
+    private var pendingPresses: [PressBucket: Int] = [:]
+
+    private struct PressBucket: Hashable {
+        var hour: Int
+        var appID: String
+        var keyboardID: String?
+        var inputSourceID: String?
+        var keyCode: UInt16
+    }
 
     private struct SyntheticBucket: Hashable {
         var hour: Int
@@ -96,6 +106,7 @@ final class LiveTracker {
         if capture {
             startCapture()
             observeSleep()
+            observeTermination()
         } else {
             // Key events arrive through `handle` instead of the tap.
             status = .running
@@ -126,9 +137,9 @@ final class LiveTracker {
         return attempt { try store.sessions(in: interval) } ?? []
     }
 
-    func firstSessionStart() -> Date? {
+    func firstHistoryStart() -> Date? {
         guard let store else { return nil }
-        return attempt { try store.firstSessionStart() } ?? nil
+        return attempt { try store.firstHistoryStart() } ?? nil
     }
 
     func allSessions() -> [SessionRecord] {
@@ -139,6 +150,11 @@ final class LiveTracker {
     func keyStats(in interval: DateInterval, filter: StatFilter = StatFilter()) -> [UInt16: KeyCount] {
         guard let store else { return [:] }
         return attempt { try store.keyStats(in: interval, filter: filter) } ?? [:]
+    }
+
+    func pressCounts(in interval: DateInterval, filter: StatFilter = StatFilter()) -> [UInt16: Int] {
+        guard let store else { return [:] }
+        return attempt { try store.pressCounts(in: interval, filter: filter) } ?? [:]
     }
 
     func pairStats(in interval: DateInterval, filter: StatFilter = StatFilter()) -> [KeyPair: PairTiming] {
@@ -171,6 +187,7 @@ final class LiveTracker {
     func deleteHistory(appID: String) {
         // Drop anything not yet saved for the app, so it can't be written back afterwards.
         pendingSynthetic = pendingSynthetic.filter { $0.key.appID != appID }
+        pendingPresses = pendingPresses.filter { $0.key.appID != appID }
         if engine.current?.context.appID == appID {
             engine = SessionTracker(inactivityTimeout: inactivityTimeout, minimumCharacters: minimumCharacters)
             current = nil
@@ -183,6 +200,7 @@ final class LiveTracker {
         engine = SessionTracker(inactivityTimeout: inactivityTimeout, minimumCharacters: minimumCharacters)
         current = nil
         pendingSynthetic = [:]
+        pendingPresses = [:]
         attempt { try store?.deleteAll() }
         revision += 1
     }
@@ -209,6 +227,12 @@ final class LiveTracker {
             pendingSynthetic[SyntheticBucket(hour: Hour.index(clock.now()), appID: appID), default: 0] += 1
             return
         }
+        // Modifier-only events aren't key-downs, so they never enter this path.
+        if !key.isRepeat {
+            let bucket = PressBucket(hour: Hour.index(clock.now()), appID: appID, keyboardID: keyboard?.id,
+                                     inputSourceID: inputSource?.id, keyCode: key.keyCode)
+            pendingPresses[bucket, default: 0] += 1
+        }
         let press = KeyPress(
             time: key.time,
             keyCode: key.keyCode,
@@ -217,9 +241,9 @@ final class LiveTracker {
             textCategory: KeyClassifier.textCategory(key.text)
         )
         let context = TypingContext(appID: appID, keyboardID: keyboard?.id, inputSourceID: inputSource?.id)
-        if let closed = engine.record(press, in: context) { save(closed) }
         if let keyboard { seenKeyboards[keyboard.id] = keyboard }
         if let inputSource { seenInputSources[inputSource.id] = inputSource }
+        if let closed = engine.record(press, in: context) { save(closed) }
         current = engine.current
         liveWPM = engine.live.wordsPerMinute(at: key.time)
     }
@@ -230,29 +254,37 @@ final class LiveTracker {
         current = engine.current
         liveWPM = engine.live.wordsPerMinute(at: clock.uptime())
         ticks += 1
-        if ticks % 60 == 0 { flushSynthetic() }
+        if ticks % 60 == 0 { flushCounts() }
     }
 
     func endSession() {
         if let closed = engine.end() { save(closed) }
         current = nil
-        flushSynthetic()
+        flushCounts()
     }
 
     private func save(_ session: TypingSession) {
         // Session times are seconds since boot; anchor the last press to the wall clock.
         let end = clock.now().addingTimeInterval(session.end - clock.uptime())
         attempt { try store?.save(session, endingAt: end) }
+        flushCounts()
+        revision += 1
+    }
+
+    private func flushCounts() {
         for keyboard in seenKeyboards.values { attempt { try store?.noteKeyboard(keyboard) } }
         for source in seenInputSources.values { attempt { try store?.noteInputSource(source) } }
         seenKeyboards = [:]
         seenInputSources = [:]
-        flushSynthetic()
-        revision += 1
-    }
-
-    private func flushSynthetic() {
-        guard !pendingSynthetic.isEmpty else { return }
+        guard !pendingSynthetic.isEmpty || !pendingPresses.isEmpty else { return }
+        if let store {
+            for (bucket, count) in pendingPresses {
+                if attempt({ try store.addPresses(count: count, keyCode: bucket.keyCode, appID: bucket.appID,
+                                                  keyboardID: bucket.keyboardID, inputSourceID: bucket.inputSourceID, hour: bucket.hour) }) != nil {
+                    pendingPresses.removeValue(forKey: bucket)
+                }
+            }
+        }
         for (bucket, count) in pendingSynthetic {
             attempt { try store?.addSynthetic(count: count, appID: bucket.appID, hour: bucket.hour) }
         }
@@ -310,6 +342,14 @@ final class LiveTracker {
     private func observeSleep() {
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.endSession() }
+        }
+    }
+
+    private func observeTermination() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.endSession() }
         }

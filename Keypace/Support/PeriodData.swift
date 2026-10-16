@@ -1,12 +1,14 @@
 import Foundation
 import KeypaceCore
 
-/// Sessions for a period and for the period before it.
+/// Sessions and press totals for a period and for the period before it.
 struct PeriodData {
     var period: Period
     var interval: DateInterval?
     var sessions: [SessionRecord] = []
     var previousSessions: [SessionRecord]?
+    var presses = 0
+    var previousPresses: Int?
 
     var totals: TypingTotals { Statistics.totals(sessions) }
     var previousTotals: TypingTotals? { previousSessions.map(Statistics.totals) }
@@ -14,9 +16,15 @@ struct PeriodData {
     @MainActor
     init(_ period: Period, tracker: LiveTracker, now: Date = .now, calendar: Calendar = .current) {
         self.period = period
-        interval = period.interval(now: now, calendar: calendar, firstSession: tracker.firstSessionStart())
-        if let interval { sessions = tracker.sessions(in: interval) }
-        if let previous = period.previous(now: now, calendar: calendar) { previousSessions = tracker.sessions(in: previous) }
+        interval = period.interval(now: now, calendar: calendar, firstSession: tracker.firstHistoryStart())
+        if let interval {
+            sessions = tracker.sessions(in: interval)
+            presses = tracker.pressCounts(in: interval).values.reduce(0, +)
+        }
+        if let previous = period.previous(now: now, calendar: calendar) {
+            previousSessions = tracker.sessions(in: previous)
+            previousPresses = tracker.pressCounts(in: previous).values.reduce(0, +)
+        }
     }
 }
 

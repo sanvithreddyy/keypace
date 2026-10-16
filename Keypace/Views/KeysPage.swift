@@ -10,9 +10,10 @@ struct KeysPage: View {
 
     var body: some View {
         let _ = tracker.revision
-        let interval = period.interval(now: .now, calendar: .current, firstSession: tracker.firstSessionStart())
+        let interval = period.interval(now: .now, calendar: .current, firstSession: tracker.firstHistoryStart())
         let filter = StatFilter(keyboardID: keyboardID, inputSourceID: inputSourceID)
         let keys = interval.map { tracker.keyStats(in: $0, filter: filter) } ?? [:]
+        let presses = (interval.map { tracker.pressCounts(in: $0, filter: filter) } ?? [:]).mapValues { KeyCount(presses: $0) }
         let pairs = interval.map { tracker.pairStats(in: $0, filter: filter) } ?? [:]
         let layout = inputSourceID.flatMap { id in tracker.inputSourceRecords().first { $0.id == id } }
 
@@ -20,7 +21,7 @@ struct KeysPage: View {
             VStack(alignment: .leading, spacing: 0) {
                 PageHeader(title: "Keys", period: $period).padding(.bottom, 12)
                 DeviceFilters(tracker: tracker, keyboardID: $keyboardID, inputSourceID: $inputSourceID)
-                if keys.isEmpty {
+                if presses.isEmpty {
                     Text("No key presses recorded in this period.").foregroundStyle(.secondary).padding(.top, 16)
                 } else {
                     HStack(alignment: .firstTextBaseline) {
@@ -36,7 +37,7 @@ struct KeysPage: View {
                     }
                     .padding(.top, 24)
                     .padding(.bottom, 10)
-                    KeyboardHeatmap(keys: keys, mode: mode) { KeyLabels.label($0, using: tracker.inputSources, layout: layout) }
+                    KeyboardHeatmap(keys: mode == .usage ? presses : keys, mode: mode) { KeyLabels.label($0, using: tracker.inputSources, layout: layout) }
 
                     HStack(alignment: .top, spacing: 32) {
                         CorrectedKeys(keys: keys, sources: tracker.inputSources, layout: layout)
@@ -45,7 +46,7 @@ struct KeysPage: View {
                     }
 
                     SectionHeading(title: "Fingers", detail: "Assumes touch-typing finger assignments")
-                    FingerSection(stats: FingerStats(keys: keys, pairs: pairs))
+                    FingerSection(stats: FingerStats(keys: presses, pairs: pairs))
                 }
             }
             .padding(24)

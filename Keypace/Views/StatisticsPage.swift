@@ -115,7 +115,8 @@ struct StatisticsPage: View {
         // Software-sent keystrokes have no keyboard or layout, so they can't be narrowed to one.
         let byDevice = keyboardID != nil || inputSourceID != nil
         let synthetic = byDevice ? nil : interval.map { tracker.syntheticCount(in: $0, appID: appID) }
-        let filteredShare = synthetic.map { $0 + totals.keystrokes > 0 ? Double($0) / Double($0 + totals.keystrokes) : 0 }
+        let presses = interval.map { tracker.pressCounts(in: $0, filter: StatFilter(appID: appID, keyboardID: keyboardID, inputSourceID: inputSourceID)).values.reduce(0, +) } ?? 0
+        let filteredShare = synthetic.map { $0 + presses > 0 ? Double($0) / Double($0 + presses) : 0 }
         return VStack(spacing: 0) {
             Divider()
             HStack(alignment: .top, spacing: 0) {
@@ -144,7 +145,7 @@ struct StatisticsPage: View {
             let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: customEnd))!
             return DateInterval(start: calendar.startOfDay(for: customStart), end: end)
         }
-        return period.interval(now: .now, calendar: calendar, firstSession: tracker.firstSessionStart())
+        return period.interval(now: .now, calendar: calendar, firstSession: tracker.firstHistoryStart())
     }
 
     private func matchesFilters(_ session: SessionRecord) -> Bool {
