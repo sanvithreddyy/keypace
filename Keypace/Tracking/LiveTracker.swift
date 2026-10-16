@@ -205,6 +205,8 @@ final class LiveTracker {
         current = nil
         pendingSynthetic = [:]
         pendingPresses = [:]
+        seenKeyboards = [:]
+        seenInputSources = [:]
         attempt { try store?.deleteAll() }
         revision += 1
     }

@@ -117,12 +117,13 @@ struct KeyboardHeatmap: View {
         .aspectRatio(3, contentMode: .fit)
     }
 
-    private var values: [UInt16: Double] {
+    var values: [UInt16: Double] {
+        let keys = keys.filter { KeyboardGeometry.key($0.key) != nil }
         switch mode {
         case .usage:
-            keys.filter { $0.value.presses > 0 }.mapValues { Double($0.presses) }
+            return keys.filter { $0.value.presses > 0 }.mapValues { Double($0.presses) }
         case .corrections:
-            keys.filter { $0.value.presses >= Self.minimumPresses && $0.key != 51 }.compactMapValues(\.correctionRate)
+            return keys.filter { $0.value.presses >= Self.minimumPresses && $0.key != 51 }.compactMapValues(\.correctionRate)
         }
     }
 

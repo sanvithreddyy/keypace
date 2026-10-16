@@ -11,71 +11,74 @@ struct OverviewPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 PageHeader(title: "Overview", period: $period).padding(.bottom, 16)
-                if data.sessions.isEmpty && data.presses == 0 {
-                    Text(period == .today ? "No typing recorded today." : "No typing recorded in this period.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    StatRow(data: data, streaks: streaks)
-                    if !data.sessions.isEmpty {
-                        SectionHeading(title: period == .today ? "Speed by hour" : "Speed by day",
-                                       detail: data.previousSessions == nil ? nil : "This period in full ink, the previous one in gray")
-                        SpeedChart(data: data)
-                        SectionHeading(title: "When you type fastest", detail: "Average wpm by weekday and hour")
-                        WeekHourHeatmap(sessions: data.sessions)
-                        SectionHeading(title: "Apps", detail: "Typing time · wpm")
-                        AppBars(apps: Array(Statistics.byApp(data.sessions).prefix(5)))
-                    }
+                StatRow(tracker: tracker, data: data)
+                if !data.sessions.isEmpty {
+                    SectionHeading(title: period == .today ? "Speed by hour" : "Speed by day",
+                                   detail: data.previousSessions == nil ? nil : "This period in full ink, the previous one in gray")
+                    SpeedChart(data: data)
+                    SectionHeading(title: "When you type fastest", detail: "Average wpm by weekday and hour")
+                    WeekHourHeatmap(sessions: data.sessions)
+                    SectionHeading(title: "Apps", detail: "Typing time · wpm")
+                    AppBars(apps: Array(Statistics.byApp(data.sessions).prefix(5)))
                 }
             }
             .padding(24)
         }
-    }
-
-    private var streaks: (current: Int, longest: Int) {
-        _ = tracker.revision
-        return Statistics.streaks(tracker.allSessions(), today: .now, calendar: .current)
     }
 }
 
 /// Five stat blocks divided by hairlines, each with its change against the previous period.
 /// Green and red mean better and worse, so only speed and corrections are colored.
 private struct StatRow: View {
+    let tracker: LiveTracker
     let data: PeriodData
-    let streaks: (current: Int, longest: Int)
 
     private enum Tone { case better, worse, neutral }
 
     var body: some View {
-        let now = data.totals
-        let before = data.previousTotals
-        VStack(spacing: 0) {
-            Divider()
-            HStack(alignment: .top, spacing: 0) {
-                block("Net speed", "\(Format.wpm(now.wpm)) wpm", change: difference(now.wpm, before?.wpm).map {
-                    (Format.signed($0), tone($0, threshold: 0.5, higherIsBetter: true))
-                })
-                .help("Average speed after corrections, weighted by typing time.")
+        let _ = tracker.revision
+        let presses = data.interval.map { tracker.pressCounts(in: $0).values.reduce(0, +) } ?? 0
+        if data.sessions.isEmpty && presses == 0 {
+            Text(data.period == .today ? "No typing recorded today." : "No typing recorded in this period.")
+                .foregroundStyle(.secondary)
+        } else {
+            let now = data.totals
+            let before = data.previousTotals
+            let previousPresses = data.previousInterval.map { tracker.pressCounts(in: $0).values.reduce(0, +) }
+            VStack(spacing: 0) {
                 Divider()
-                block("Corrections", Format.percent(now.correctionRate), change: difference(now.correctionRate, before?.correctionRate).map {
-                    (Format.signed($0 * 100, decimals: 1) + " pts", tone($0, threshold: 0.0005, higherIsBetter: false))
-                })
+                HStack(alignment: .top, spacing: 0) {
+                    block("Net speed", "\(Format.wpm(now.wpm)) wpm", change: difference(now.wpm, before?.wpm).map {
+                        (Format.signed($0), tone($0, threshold: 0.5, higherIsBetter: true))
+                    })
+                    .help("Average speed after corrections, weighted by typing time.")
+                    Divider()
+                    block("Corrections", Format.percent(now.correctionRate), change: difference(now.correctionRate, before?.correctionRate).map {
+                        (Format.signed($0 * 100, decimals: 1) + " pts", tone($0, threshold: 0.0005, higherIsBetter: false))
+                    })
+                    Divider()
+                    block("Typing time", Format.duration(now.duration), change: before.map {
+                        (Format.signed((now.duration - $0.duration) / 60) + " min", .neutral)
+                    })
+                    Divider()
+                    block("Keystrokes", Format.count(presses), change: previousPresses.flatMap { before in
+                        before > 0
+                            ? (Format.signed(Double(presses - before) / Double(before) * 100) + "%", .neutral)
+                            : nil
+                    })
+                    Divider()
+                    block("Streak", "\(streaks.current) \(streaks.current == 1 ? "day" : "days")", change: ("best \(streaks.longest)", .neutral))
+                }
+                .fixedSize(horizontal: false, vertical: true)
                 Divider()
-                block("Typing time", Format.duration(now.duration), change: before.map {
-                    (Format.signed((now.duration - $0.duration) / 60) + " min", .neutral)
-                })
-                Divider()
-                block("Keystrokes", Format.count(data.presses), change: data.previousPresses.flatMap { before in
-                    before > 0
-                        ? (Format.signed(Double(data.presses - before) / Double(before) * 100) + "%", .neutral)
-                        : nil
-                })
-                Divider()
-                block("Streak", "\(streaks.current) \(streaks.current == 1 ? "day" : "days")", change: ("best \(streaks.longest)", .neutral))
             }
-            .fixedSize(horizontal: false, vertical: true)
-            Divider()
+            .monospacedDigit()
         }
-        .monospacedDigit()
+    }
+
+    private var streaks: (current: Int, longest: Int) {
+        _ = tracker.revision
+        return Statistics.streaks(tracker.allSessions(), today: .now, calendar: .current)
     }
 
     private func difference(_ now: Double?, _ before: Double?) -> Double? {

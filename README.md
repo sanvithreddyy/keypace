@@ -74,9 +74,11 @@ keyboards or layouts. Sessions under 25 characters are discarded, but their
 presses still count. Both limits are adjustable in Settings. Combined speed
 figures weight each session by its typing time.
 
-All-press counting begins with this version. Earlier periods use saved sessions'
-character-key and Delete presses; older data is not backfilled. New press counts
-are stored by hour, and an hour counts whenever it overlaps the selected range.
+All-press counting begins with this version. Sessions saved before this version
+keep their own character-key and Delete counts, included by session start;
+older data is not backfilled. New presses are counted separately, with no gap
+or double counting at the changeover. They are stored by hour, and an hour
+counts whenever it overlaps the selected range.
 
 Deletions only count when they remove characters typed in the same session
 and still right before the cursor; deleting text that was already there, or

@@ -42,8 +42,10 @@ patterns in the background and keeps everything on this Mac.
      bursts, shortcuts and navigation outside sessions. Held-key repeats,
      modifier-only presses, software-sent keys and excluded apps don't count.
      Counts are hourly by app, keyboard, layout and key; overlapping hours count
-     in full. Before the first stored press hour, use saved sessions' character-key
-     and Delete presses, with no backfill.
+     in full. Sessions saved before this version keep their own character-key and
+     Delete counts, included by session start. An immutable session-ID boundary
+     recorded during migration separates them from new press counts, with no gap,
+     double counting or backfill.
    - Deletions count only when they remove characters typed in the session;
      Option-Delete uses transient character categories to estimate the word;
      Command-Delete is editing and clears ownership because visual line wrapping

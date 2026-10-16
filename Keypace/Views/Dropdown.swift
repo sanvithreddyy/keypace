@@ -223,7 +223,9 @@ private struct SpeedTab: View {
     @Binding var period: Period
 
     var body: some View {
+        let _ = tracker.revision
         let totals = data.totals
+        let presses = data.interval.map { tracker.pressCounts(in: $0).values.reduce(0, +) } ?? 0
         PanelHeader(title: "Net speed") { PeriodPicker(period: $period) }
         Panel {
             HStack(spacing: 6) {
@@ -252,7 +254,7 @@ private struct SpeedTab: View {
             .padding(.bottom, 6)
             Bar(fraction: (totals.correctionRate ?? 0) / 0.1, emphasized: true).padding(.bottom, 8)
             PanelRow(label: "Typing time", value: Format.duration(totals.duration))
-            PanelRow(label: "Keystrokes", value: data.presses.formatted())
+            PanelRow(label: "Keystrokes", value: presses.formatted())
             if let interval = data.interval {
                 PanelRow(label: "Filtered input", value: tracker.syntheticCount(in: interval).formatted())
             }
@@ -294,6 +296,7 @@ private struct KeysTab: View {
     @Binding var period: Period
 
     var body: some View {
+        let _ = tracker.revision
         let keys = data.interval.map { tracker.keyStats(in: $0) } ?? [:]
         let presses = (data.interval.map { tracker.pressCounts(in: $0) } ?? [:]).mapValues { KeyCount(presses: $0) }
         let pairs = data.interval.map { tracker.pairStats(in: $0) } ?? [:]

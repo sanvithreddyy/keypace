@@ -99,7 +99,7 @@ struct PipelineTests {
         let data = PeriodData(.today, tracker: tracker, now: clock.date)
         #expect(data.sessions.count == 1)
         #expect(data.totals.characters == 43)
-        #expect(data.presses == 43)
+        #expect(tracker.pressCounts(in: try #require(data.interval)).values.reduce(0, +) == 43)
     }
 
     @Test func `deleting an app's history also drops its unsaved typing`() throws {
@@ -316,7 +316,7 @@ struct PipelineTests {
         #expect(tracker.pressCounts(in: history, filter: StatFilter(appID: "com.apple.mail")).values.reduce(0, +) == 5)
     }
 
-    @Test func `deleting all history clears pending and stored presses`() throws {
+    @Test func `deleting all history clears pending presses keyboards and layouts`() throws {
         let tracker = try makeTracker(clock: clock)
         let typist = Typist(tracker: tracker, clock: clock)
         typist.type("abc")
@@ -325,6 +325,8 @@ struct PipelineTests {
         tracker.deleteAllHistory()
         tracker.endSession()
         #expect(tracker.pressCounts(in: history).isEmpty)
+        #expect(tracker.keyboards().isEmpty)
+        #expect(tracker.inputSourceRecords().isEmpty)
     }
 
     @Test func `presses retain the hour app keyboard and layout seen on arrival`() throws {
@@ -343,7 +345,7 @@ struct PipelineTests {
         #expect(tracker.pressCounts(in: history, filter: StatFilter(appID: "com.apple.mail", keyboardID: SampleData.mxKeys.id, inputSourceID: SampleData.british.id)) == [USKeys.code(for: "b"): 3])
     }
 
-    @Test func `all-time and comparison press totals include short bursts`() throws {
+    @Test func `period ranges support all-time and comparison press totals without sessions`() throws {
         let tracker = try makeTracker(clock: clock, minimumCharacters: nil)
         let now = clock.date
         clock.date = now.addingTimeInterval(-86_400)
@@ -355,12 +357,11 @@ struct PipelineTests {
         tracker.endSession()
         let today = PeriodData(.today, tracker: tracker, now: now)
         #expect(today.sessions.isEmpty)
-        #expect(today.presses == 6)
-        #expect(today.previousPresses == 3)
+        #expect(tracker.pressCounts(in: try #require(today.interval)).values.reduce(0, +) == 6)
+        #expect(tracker.pressCounts(in: try #require(today.previousInterval)).values.reduce(0, +) == 3)
         let all = PeriodData(.allTime, tracker: tracker, now: now)
-        #expect(all.interval != nil)
-        #expect(all.presses == 9)
-        #expect(all.previousPresses == nil)
+        #expect(tracker.pressCounts(in: try #require(all.interval)).values.reduce(0, +) == 9)
+        #expect(all.previousInterval == nil)
     }
 
     private var history: DateInterval { DateInterval(start: .distantPast, end: .distantFuture) }

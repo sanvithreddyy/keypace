@@ -172,6 +172,10 @@ public struct SessionStore: Sendable {
             }
         }
         migrator.registerMigration("v6-press-counts") { db in
+            try db.create(table: "pressHistory") { t in
+                t.column("legacySessionID", .integer).notNull()
+            }
+            try db.execute(sql: "INSERT INTO pressHistory SELECT COALESCE(MAX(id), 0) FROM session")
             try db.create(table: "pressStat") { t in
                 t.column("hour", .integer).notNull()
                 t.column("appID", .text).notNull()
@@ -242,39 +246,34 @@ public struct SessionStore: Sendable {
     }
 
     /// All presses in hours overlapping the interval, optionally narrowed to an app, keyboard or layout.
-    /// Before the first stored press-count hour, uses sessions that started in the interval and before
-    /// that hour. Those older key counts cover only character keys and Delete. With no press counts,
-    /// the entire interval uses sessions. Coverage starts globally, regardless of the filter.
+    /// Sessions saved before press counting began keep their own character-key and Delete counts,
+    /// included by session start. The migration's session-ID boundary keeps both sources disjoint,
+    /// even in the first press-count hour. Older data is not backfilled.
     public func pressCounts(in interval: DateInterval, filter: StatFilter = StatFilter()) throws -> [UInt16: Int] {
         guard interval.duration > 0 else { return [:] }
         return try db.read { db in
-            let firstHour = try Int.fetchOne(db, sql: "SELECT MIN(hour) FROM pressStat")
-            let coverage = firstHour.map { Date(timeIntervalSince1970: Double($0) * 3600) }
             var counts: [UInt16: Int] = [:]
-            let sessionEnd = min(interval.end, coverage ?? interval.end)
-            if sessionEnd > interval.start {
-                let (clause, arguments) = filter.sql(interval: DateInterval(start: interval.start, end: sessionEnd))
-                let rows = try Row.fetchAll(db, sql: """
-                    SELECT k.keyCode, SUM(k.presses) AS presses
-                    FROM sessionKey k JOIN session s ON s.id = k.sessionId
-                    WHERE \(clause) GROUP BY k.keyCode
-                    """, arguments: arguments)
-                for row in rows { counts[UInt16(row["keyCode"] as Int)] = row["presses"] }
+            let (clause, sessionArguments) = filter.sql(interval: interval)
+            let legacyRows = try Row.fetchAll(db, sql: """
+                SELECT k.keyCode, SUM(k.presses) AS presses
+                FROM sessionKey k JOIN session s ON s.id = k.sessionId
+                WHERE s.id <= (SELECT legacySessionID FROM pressHistory) AND \(clause)
+                GROUP BY k.keyCode
+                """, arguments: sessionArguments)
+            for row in legacyRows { counts[UInt16(row["keyCode"] as Int)] = row["presses"] }
+
+            var clauses = ["hour >= ?", "hour < ?"]
+            var arguments: [any DatabaseValueConvertible] = [Hour.index(interval.start), Hour.index(interval.end, roundingUp: true)]
+            for (column, value) in [("appID", filter.appID), ("keyboardID", filter.keyboardID), ("inputSourceID", filter.inputSourceID)] {
+                guard let value else { continue }
+                clauses.append("\(column) = ?")
+                arguments.append(value)
             }
-            if firstHour != nil {
-                var clauses = ["hour >= ?", "hour < ?"]
-                var arguments: [any DatabaseValueConvertible] = [Hour.index(interval.start), Hour.index(interval.end, roundingUp: true)]
-                for (column, value) in [("appID", filter.appID), ("keyboardID", filter.keyboardID), ("inputSourceID", filter.inputSourceID)] {
-                    guard let value else { continue }
-                    clauses.append("\(column) = ?")
-                    arguments.append(value)
-                }
-                let rows = try Row.fetchAll(db, sql: """
-                    SELECT keyCode, SUM(presses) AS presses FROM pressStat
-                    WHERE \(clauses.joined(separator: " AND ")) GROUP BY keyCode
-                    """, arguments: StatementArguments(arguments))
-                for row in rows { counts[UInt16(row["keyCode"] as Int), default: 0] += row["presses"] as Int }
-            }
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT keyCode, SUM(presses) AS presses FROM pressStat
+                WHERE \(clauses.joined(separator: " AND ")) GROUP BY keyCode
+                """, arguments: StatementArguments(arguments))
+            for row in rows { counts[UInt16(row["keyCode"] as Int), default: 0] += row["presses"] as Int }
             return counts
         }
     }

@@ -23,7 +23,7 @@ struct PressStoreTests {
         let db = try DatabaseQueue()
         try SessionStore.migrator.migrate(db, upTo: "v5-typing-time")
         let old = try db.write { db in
-            let record = try SessionRecord(start: monday, end: monday.addingTimeInterval(30), appID: "notes",
+            let record = try SessionRecord(id: 7, start: monday, end: monday.addingTimeInterval(30), appID: "notes",
                                            characters: 10, backspaces: 2, keystrokes: 12, deletions: 1, activeSeconds: 2.5).inserted(db)
             try db.execute(sql: "INSERT INTO sessionKey VALUES (?, 0, 10, 1)", arguments: [record.id])
             try db.execute(sql: "INSERT INTO sessionPair VALUES (?, 0, 1, 2, 300)", arguments: [record.id])
@@ -37,6 +37,7 @@ struct PressStoreTests {
             #expect(columns.allSatisfy { $0.isNotNull })
             #expect(columns.map(\.primaryKeyIndex) == [1, 2, 3, 4, 5, 0])
             #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM pressStat") == 0)
+            #expect(try Int64.fetchOne(db, sql: "SELECT legacySessionID FROM pressHistory") == old.id)
         }
         #expect(try store.allSessions() == [old])
         #expect(try store.keyStats(in: day) == [0: KeyCount(presses: 10, corrections: 1)])
@@ -75,45 +76,108 @@ struct PressStoreTests {
         #expect(try store.pressCounts(in: day, filter: StatFilter(appID: "missing")).isEmpty)
     }
 
-    @Test func `history stitches at the first press hour using session starts`() throws {
-        let store = try SessionStore.inMemory()
-        let coverage = monday.addingTimeInterval(3600)
-        try save(store, at: monday.addingTimeInterval(-30), presses: 100)
-        try save(store, at: monday, presses: 10)
-        // A session crossing the coverage start stays in the older portion in full.
-        try save(store, at: coverage.addingTimeInterval(-10), presses: 4)
-        try save(store, at: coverage, presses: 99)
-        try save(store, at: coverage.addingTimeInterval(600), presses: 99)
-        try add(store, 7, hour: Hour.index(coverage))
-        try add(store, 3, code: 123, hour: Hour.index(coverage) + 1)
-        #expect(try store.pressCounts(in: day) == [0: 21, 123: 3])
-        #expect(try store.pressCounts(in: DateInterval(start: monday, end: coverage)) == [0: 14])
-        #expect(try store.pressCounts(in: DateInterval(start: coverage, end: day.end)) == [0: 7, 123: 3])
-        // Session-based corrections and their denominators are untouched.
-        #expect(try store.keyStats(in: day)[0] == KeyCount(presses: 212, corrections: 8))
+    private func legacyDatabase() throws -> DatabaseQueue {
+        let db = try DatabaseQueue()
+        try SessionStore.migrator.migrate(db, upTo: "v5-typing-time")
+        return db
     }
 
-    @Test func `coverage is global even when filtered presses are absent`() throws {
-        let store = try SessionStore.inMemory()
-        let coverage = monday.addingTimeInterval(3600)
-        try save(store, at: monday, app: "mail", keyboard: "external", layout: "GB", presses: 4)
-        try save(store, at: coverage, app: "mail", keyboard: "external", layout: "GB", presses: 99)
-        try add(store, 7, hour: Hour.index(coverage))
-        for filter in [StatFilter(appID: "mail"), StatFilter(keyboardID: "external"), StatFilter(inputSourceID: "GB")] {
-            #expect(try store.pressCounts(in: day, filter: filter) == [0: 4])
-            #expect(try store.pressCounts(in: DateInterval(start: coverage, end: day.end), filter: filter).isEmpty)
+    @discardableResult
+    private func saveLegacy(_ db: DatabaseQueue, at start: Date, app: String = "notes", keyboard: String = "built-in", layout: String = "US", presses: Int) throws -> SessionRecord {
+        try db.write { db in
+            let saved = try SessionRecord(start: start, end: start.addingTimeInterval(30), appID: app,
+                                          keyboardID: keyboard, inputSourceID: layout,
+                                          characters: presses, backspaces: 0, keystrokes: presses).inserted(db)
+            try db.execute(sql: "INSERT INTO sessionKey VALUES (?, 0, ?, 2)", arguments: [saved.id, presses])
+            return saved
         }
     }
 
-    @Test func `without press rows history uses session keys and their filters`() throws {
-        let store = try SessionStore.inMemory()
-        try save(store, at: monday, presses: 4)
-        try save(store, at: monday.addingTimeInterval(60), app: "mail", keyboard: "external", layout: "GB", presses: 6)
-        try save(store, at: day.end, presses: 99)
+    @Test func `legacy sessions in the first press hour keep all their presses`() throws {
+        let db = try legacyDatabase()
+        let hour = monday.addingTimeInterval(10 * 3600)
+        try saveLegacy(db, at: hour.addingTimeInterval(10 * 60), presses: 40)
+        let store = try SessionStore(db)
+        try save(store, at: hour.addingTimeInterval(30 * 60), presses: 3)
+        try add(store, 3, hour: Hour.index(hour))
+        let counts = try store.pressCounts(in: day)
+        #expect(counts == [0: 43])
+        #expect(try store.pressCounts(in: DateInterval(start: hour, duration: 3600)) == [0: 43])
+        #expect(try SessionStore(db).pressCounts(in: day) == [0: 43])
+    }
+
+    @Test func `legacy history uses session starts and new sessions never add presses twice`() throws {
+        let db = try legacyDatabase()
+        let hour = monday.addingTimeInterval(3600)
+        try saveLegacy(db, at: monday.addingTimeInterval(-30), presses: 100)
+        try saveLegacy(db, at: monday, presses: 10)
+        try saveLegacy(db, at: hour.addingTimeInterval(-10), presses: 4)
+        let store = try SessionStore(db)
+        // Even a new session with an earlier start is outside the immutable legacy boundary.
+        try save(store, at: monday.addingTimeInterval(60), presses: 99)
+        try save(store, at: hour.addingTimeInterval(600), presses: 99)
+        try add(store, 7, hour: Hour.index(hour))
+        try add(store, 3, code: 123, hour: Hour.index(hour) + 1)
+        #expect(try store.pressCounts(in: day) == [0: 21, 123: 3])
+        #expect(try store.pressCounts(in: DateInterval(start: monday, end: hour)) == [0: 14])
+        #expect(try store.pressCounts(in: DateInterval(start: hour, end: day.end)) == [0: 7, 123: 3])
+        #expect(try store.keyStats(in: day)[0] == KeyCount(presses: 212, corrections: 8))
+    }
+
+    @Test func `every filter applies to both legacy sessions and new press counts`() throws {
+        let db = try legacyDatabase()
+        try saveLegacy(db, at: monday, presses: 2)
+        try saveLegacy(db, at: monday, keyboard: "external", presses: 3)
+        try saveLegacy(db, at: monday, app: "mail", keyboard: "external", layout: "GB", presses: 5)
+        try saveLegacy(db, at: day.end, presses: 99)
+        let store = try SessionStore(db)
+        try add(store, 11)
+        try add(store, 13, keyboard: "external")
+        try add(store, 17, app: "mail", keyboard: "external", layout: "GB")
+        #expect(try store.pressCounts(in: day) == [0: 51])
+        #expect(try store.pressCounts(in: day, filter: StatFilter(appID: "notes")) == [0: 29])
+        #expect(try store.pressCounts(in: day, filter: StatFilter(keyboardID: "external")) == [0: 38])
+        #expect(try store.pressCounts(in: day, filter: StatFilter(inputSourceID: "GB")) == [0: 22])
+        #expect(try store.pressCounts(in: day, filter: StatFilter(appID: "notes", keyboardID: "external", inputSourceID: "US")) == [0: 16])
+        #expect(try store.pressCounts(in: day, filter: StatFilter(appID: "mail", inputSourceID: "US")).isEmpty)
+    }
+
+    @Test func `without new press rows legacy sessions retain their own counts and filters`() throws {
+        let db = try legacyDatabase()
+        try saveLegacy(db, at: monday, presses: 4)
+        try saveLegacy(db, at: monday.addingTimeInterval(60), app: "mail", keyboard: "external", layout: "GB", presses: 6)
+        try saveLegacy(db, at: day.end, presses: 99)
+        let store = try SessionStore(db)
         #expect(try store.pressCounts(in: day) == [0: 10])
         for filter in [StatFilter(appID: "mail"), StatFilter(keyboardID: "external"), StatFilter(inputSourceID: "GB")] {
             #expect(try store.pressCounts(in: day, filter: filter) == [0: 6])
         }
+        try save(store, at: monday, presses: 99)
+        #expect(try store.pressCounts(in: day) == [0: 10])
+    }
+
+    @Test func `fresh stores start at boundary zero and use only independent press counts`() throws {
+        let db = try DatabaseQueue()
+        let store = try SessionStore(db)
+        #expect(try db.read { try Int64.fetchOne($0, sql: "SELECT legacySessionID FROM pressHistory") } == 0)
+        #expect(try store.pressCounts(in: day).isEmpty)
+        try save(store, at: monday, presses: 3)
+        #expect(try store.pressCounts(in: day).isEmpty)
+        try add(store, 3)
+        #expect(try store.pressCounts(in: day) == [0: 3])
+    }
+
+    @Test func `deleting legacy history preserves the boundary and never reuses legacy IDs`() throws {
+        let db = try legacyDatabase()
+        let old = try saveLegacy(db, at: monday, presses: 40)
+        let store = try SessionStore(db)
+        try store.deleteAll()
+        try save(store, at: monday, presses: 3)
+        #expect(try #require(store.allSessions().first?.id) > #require(old.id))
+        #expect(try db.read { try Int64.fetchOne($0, sql: "SELECT legacySessionID FROM pressHistory") } == old.id)
+        #expect(try store.pressCounts(in: day).isEmpty)
+        try add(store, 3)
+        #expect(try store.pressCounts(in: day) == [0: 3])
     }
 
     @Test func `press hours count whenever they overlap a nonempty interval`() throws {
