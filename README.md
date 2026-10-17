@@ -15,13 +15,15 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/overview.png" width="720" alt="Overview: net speed, corrections, typing time, keystrokes and streak, speed by day, fastest hours and apps">
+  <img src="docs/images/overview.png" width="1000" alt="Keypace window with sidebar, Overview metrics, speed by day, weekday and hour heatmap, and apps">
+</p>
+
+<p align="center">
+  <img src="docs/images/keys.png" width="1000" alt="Keypace window with Keys selected in the sidebar, keyboard heatmap, corrected keys, key pairs and finger statistics">
 </p>
 
 <p align="center">
   <img src="docs/images/menu.png" width="300" alt="Menu-bar panel with today's average, live speed and speed by hour">
-  &nbsp;
-  <img src="docs/images/keys.png" width="410" alt="Keys page with a keyboard heatmap, most corrected keys, key pairs and finger statistics">
 </p>
 
 ## What it shows
