@@ -1,33 +1,131 @@
-# Keypace
+<p align="center">
+  <img src="docs/images/icon.png" width="128" height="128" alt="Keypace icon">
+</p>
 
-A quiet macOS menu-bar app that measures how fast you really type, everywhere
-on your Mac, and keeps every number on your machine.
+<h1 align="center">Keypace</h1>
 
-- Live words per minute in the menu bar while you type, and a floating Live
-  Metrics window.
-- Sessions split automatically by pauses, app switches, keyboards and layouts.
-- Speed, corrections and typing time by day, hour, weekday, app, keyboard and
+<p align="center">
+  How fast you really type, everywhere on your Mac.<br>
+  A quiet menu-bar app that keeps every number on your machine.
+</p>
+
+<p align="center">
+  <a href="https://github.com/sanvithreddyy/keypace/releases/latest"><b>Download for macOS</b></a>
+  · macOS 15 or later · Apple silicon and Intel
+</p>
+
+<p align="center">
+  <img src="docs/images/overview.png" width="720" alt="Overview: net speed, corrections, typing time, keystrokes and streak, speed by day, fastest hours and apps">
+</p>
+
+<p align="center">
+  <img src="docs/images/menu.png" width="300" alt="Menu-bar panel with today's average, live speed and speed by hour">
+  &nbsp;
+  <img src="docs/images/keys.png" width="410" alt="Keys page with a keyboard heatmap, most corrected keys, key pairs and finger statistics">
+</p>
+
+## What it shows
+
+- **Live speed** in the menu bar while you type, and a floating Live Metrics window.
+- **Speed, corrections and typing time** by day, hour, weekday, app, keyboard and
   layout, compared with the previous period.
-- A keyboard heatmap, most corrected keys, slowest and fastest key pairs, and
-  finger statistics.
-- Personal records and streaks.
-- Keystrokes sent by other software (text expanders, automation) are left out.
-- Never stores what you type: only counts and timings.
+- **A keyboard heatmap**, your most corrected keys, slowest and fastest key pairs,
+  and finger statistics.
+- **Records and streaks.**
+- **Every key press counted**, including quick replies too short to measure speed.
 
-## Requirements
+Sessions split on their own at pauses, app switches, keyboards and layouts.
+Keystrokes sent by other software, such as text expanders and automation, are
+left out. Keypace never stores what you type, only counts and timings.
 
-- macOS 15 or later
-- Xcode 26 or later
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
+## Install
 
-## Build
+1. Download `Keypace-<version>.dmg` from
+   [Releases](https://github.com/sanvithreddyy/keypace/releases/latest) and drag
+   Keypace to Applications.
+2. Open Keypace. The first launch is blocked because the app isn't notarized:
+   choose **Open Anyway** in System Settings → Privacy & Security. Each new
+   version asks once.
+3. Allow Keypace under **Input Monitoring** when asked.
 
-```sh
-xcodegen generate
-open Keypace.xcodeproj
-```
+## How it measures
 
-Or from the command line:
+| Metric | Definition |
+| --- | --- |
+| WPM | characters that stayed (typed minus deleted again) ÷ 5, per minute of typing time |
+| CPM | characters that stayed, per minute of typing time |
+| Keystrokes | every key press, except held-key repeats, modifier-only presses, software-sent keys and excluded apps |
+| KPM | key presses within saved sessions, per minute of typing time |
+| Corrections | characters deleted again ÷ characters typed |
+
+**Typing time leaves out pauses.** A gap between keystrokes counts as typing
+when it's under four times your usual gap for that key pair (or that key, or
+overall), kept between 250 ms and 3 s. Before there's any history, gaps up to
+600 ms count. The keystroke that starts a burst gets one usual gap, so short
+bursts aren't overstated.
+
+**Sessions** end after 5 seconds without typing, or when you switch apps,
+keyboards or layouts. Speed ignores sessions under 25 characters, but their
+presses still count. Both limits are adjustable in Settings. Combined speed
+figures weight each session by its typing time.
+
+**The live number** covers the last 8 seconds, with the same pause-filtered
+typing time as saved sessions, and clears 2 seconds after you stop.
+
+<details>
+<summary>Corrections, keys and devices in detail</summary>
+
+<br>
+
+Deletions only count when they remove characters typed in the same session
+and still right before the cursor. Deleting text that was already there, or
+after a click, arrow key or shortcut moved the cursor, is editing.
+Option-Delete uses temporary word-boundary categories, and word segmentation
+can differ by editor and language. Command-Delete is editing, because keyboard
+events can't reveal visual line wrapping. Corrections include deliberate
+rewrites, so the app calls them corrections rather than accuracy.
+
+Each deletion is charged to the key whose character it removed. Key-pair
+timings cover consecutive characters whose gap counted as typing. Finger
+statistics assume touch-typing finger assignments. Shortcuts and navigation
+keys count toward keystrokes and per-key usage, even outside sessions;
+corrections, key-pair timings and all speed metrics come from sessions.
+
+Press counts are stored by hour, and an hour counts whenever it overlaps the
+selected range. Sessions recorded before press counting existed keep their own
+character-key and Delete counts, with no gap or double counting at the
+changeover. Sessions saved before typing time was measured keep their original
+numbers: elapsed time and every backspace.
+
+Keyboards are told apart by model and, when the keyboard reports one, a unique
+device ID or serial number. Two keyboards of the same model that report neither
+share one history.
+
+Keystrokes from a physical keyboard arrive from the HID system with no posting
+process. Anything else (text expanders, automation, scripted typing) is counted
+separately as filtered input. Paste and AI autocomplete insert text without
+keystrokes, so they never count toward speed.
+
+General Settings has a Capture row showing how often macOS paused the
+listener, key events that couldn't be read, and the most recent occurrence.
+Presses during a pause can't be counted.
+
+</details>
+
+## Privacy
+
+Keypace listens to key events without blocking or changing them. It classifies
+each press as a character, a deletion or another key, then discards the
+character. The database (`~/Library/Application Support/Keypace/typing.sqlite`)
+holds session times, app, keyboard and layout identifiers, per-session key and
+key-pair counts, hourly press and filtered-input counts, and each layout's key
+labels. Capture issue counts and dates are kept in local preferences. Nothing
+leaves the Mac.
+
+## Build from source
+
+Requires macOS 15, Xcode 26 and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+(`brew install xcodegen`).
 
 ```sh
 xcodegen generate
@@ -35,28 +133,31 @@ xcodebuild -project Keypace.xcodeproj -scheme Keypace -derivedDataPath build bui
 open build/Build/Products/Debug/Keypace.app
 ```
 
-On first launch, allow Keypace under System Settings → Privacy & Security →
-Input Monitoring.
-
 The project signs ad hoc by default. macOS ties Input Monitoring to the
 signature, so an ad hoc build asks again after every rebuild. To keep the
 permission, copy `Config/Signing.local.example.xcconfig` to
 `Config/Signing.local.xcconfig` and fill in your signing identity.
 
-## Release
+### Test
+
+```sh
+scripts/test.sh        # engine tests, then app pipeline and screen tests
+scripts/snapshots.sh   # renders every screen with sample history to build/snapshots
+```
+
+The app tests compile the app's code into the test bundle and run it with
+`xctest` directly, so they never launch the menu-bar app or touch real history.
+
+### Release
 
 ```sh
 KEYPACE_SIGN_IDENTITY="Apple Development" scripts/release.sh --no-notarize
 ```
 
-The signed DMG lands at `build/release/Keypace-<version>.dmg`. It isn't
-notarized, so on another Mac the first launch is blocked: open Keypace once,
-then choose **Open Anyway** in System Settings → Privacy & Security. Each new
-version needs this once, and Input Monitoring must be granted on each Mac.
-
-To ship a notarized DMG instead, which needs a paid Apple Developer membership:
-create a **Developer ID Application** certificate in Xcode → Settings → Accounts →
-Manage Certificates, store notarization credentials once in Terminal, then run
+The signed DMG lands at `build/release/Keypace-<version>.dmg`. To ship a
+notarized DMG instead, which needs a paid Apple Developer membership, create a
+**Developer ID Application** certificate in Xcode → Settings → Accounts →
+Manage Certificates, store notarization credentials once, then run
 `scripts/release.sh` without arguments.
 
 ```sh
@@ -67,88 +168,7 @@ Set `DEVELOPMENT_TEAM` in `Config/Signing.local.xcconfig` (or `KEYPACE_TEAM_ID`)
 `KEYPACE_SIGN_IDENTITY` defaults to `Developer ID Application` and
 `KEYPACE_NOTARY_PROFILE` to `keypace`.
 
-## Test
-
-```sh
-scripts/test.sh        # engine tests, then app pipeline and screen tests
-scripts/snapshots.sh   # renders every screen with sample history to build/snapshots
-```
-
-The app tests compile the app's code into the test bundle and run it with
-`xctest` directly, so they never launch the menu-bar app or touch real history.
-
-## How it measures
-
-| Metric | Definition |
-| --- | --- |
-| WPM | characters that stayed (typed minus deleted again) ÷ 5, per minute of typing time |
-| CPM | characters that stayed, per minute of typing time |
-| Keystrokes | every key press while Keypace is listening, except held-key repeats, modifier-only presses, software-sent keys and excluded apps |
-| KPM | key presses within saved sessions, per minute of typing time |
-| Corrections | characters deleted again ÷ characters typed |
-
-Typing time leaves out pauses. Each gap between keystrokes counts as typing
-when it's under four times your usual gap for that key pair (or that key, or
-overall), kept between 250 ms and 3 s; before there's any history, gaps up to
-600 ms count. The keystroke that starts a burst is given one usual gap, so
-short bursts aren't overstated.
-
-A session ends after 5 seconds without typing, or when you switch apps,
-keyboards or layouts. Sessions under 25 characters are discarded, but their
-presses still count. Both limits are adjustable in Settings. Combined speed
-figures weight each session by its typing time.
-
-All-press counting begins with this version. Sessions saved before this version
-keep their own character-key and Delete counts, included by session start;
-older data is not backfilled. New presses are counted separately, with no gap
-or double counting at the changeover. They are stored by hour, and an hour
-counts whenever it overlaps the selected range.
-
-Deletions only count when they remove characters typed in the same session
-and still right before the cursor; deleting text that was already there, or
-after a click, arrow key or shortcut moved the cursor, is editing. Option-Delete
-uses temporary word-boundary categories; word segmentation can differ by editor
-and language.
-Command-Delete is editing and clears ownership because keyboard events cannot
-reveal visual line wrapping. Corrections include
-deliberate rewrites, so the app calls them corrections rather than accuracy.
-Each deletion is charged to the key whose character it removed. Key-pair
-timings cover consecutive characters whose gap counted as typing. Finger
-statistics assume touch-typing finger assignments. Shortcuts and navigation
-keys count toward keystrokes and per-key usage, even outside sessions.
-Modifier-only presses don't produce key-down events and aren't counted.
-Corrections, key-pair timings and all speed metrics stay session-based.
-
-The live number covers events in the last 8 seconds, using the same pause-filtered
-typing time as saved sessions, and clears 2 seconds after you stop.
-
-Sessions saved before typing time was measured keep their original numbers:
-elapsed time and every backspace.
-
-Keyboards are told apart by model and, when the keyboard reports one, a unique
-device ID or serial number. Two keyboards of the same model that report neither
-share one history.
-
-Keystrokes from a physical keyboard arrive from the HID system with no posting
-process; anything else (text expanders, automation, scripted typing) is counted
-separately as filtered input. Paste and AI autocomplete insert text without
-keystrokes, so they never count toward speed.
-
-General Settings has a Capture row showing recorded listener pauses by macOS,
-key events that couldn't be read, and the most recent occurrence, since this
-version first launched. Presses during a pause can't be counted.
-
-## Privacy
-
-Keypace listens to key events without blocking or changing them. It classifies
-each press as a character, a deletion or another key, then discards the
-character. The database (`~/Library/Application Support/Keypace/typing.sqlite`)
-holds session times, app, keyboard and layout identifiers, per-session key and
-key-pair counts, hourly press and filtered-input counts, and each layout's key labels.
-Capture issue counts and dates are kept in local preferences.
-Nothing leaves the Mac.
-
-## Layout
+### Layout
 
 ```
 Keypace/                 App target
@@ -159,8 +179,8 @@ Keypace/                 App target
 KeypaceTests/            Pipeline and screen tests with sample history
 Packages/KeypaceCore/    Session engine, storage, statistics, records, tests
 Config/                  Signing configuration
-scripts/                 Test and snapshot scripts
-docs/                    Spec, roadmap, design mockups
+scripts/                 Test, snapshot and release scripts
+docs/                    Spec, roadmap, design mockups, README images
 ```
 
 ## License
