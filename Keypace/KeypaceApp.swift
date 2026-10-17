@@ -43,7 +43,7 @@ private struct MenuBarLabel: View {
                 .help(number == .liveThenToday && tracker.liveWPM != nil
                       ? "Live net speed · last 8 seconds" : "Today's average net speed")
         } else {
-            Image(systemName: "keyboard")
+            Image("MenuBarIcon")
         }
     }
 
