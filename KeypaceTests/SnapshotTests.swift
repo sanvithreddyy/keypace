@@ -35,12 +35,16 @@ struct SnapshotTests {
         #expect((peak.value.wpm ?? 0) > (Statistics.totals(weekend).wpm ?? 0) + 3)
         let daily = Statistics.byDay(data.sessions, calendar: .current).sorted { $0.key < $1.key }
         #expect(daily.count == 30)
-        #expect(abs((daily.first?.value.wpm ?? 0) - 62) < 0.1)
-        #expect(abs((daily.last?.value.wpm ?? 0) - 72) < 0.1)
+        #expect(abs((daily.first?.value.wpm ?? 0) - 62) < 2.5)
+        #expect(abs((daily.last?.value.wpm ?? 0) - 72) < 2.5)
+        // Days wobble around a rising trend; the previous period stays flatter and slower.
+        let half = daily.count / 2
+        let firstHalf = daily.prefix(half).compactMap(\.value.wpm), secondHalf = daily.suffix(half).compactMap(\.value.wpm)
+        #expect(secondHalf.reduce(0, +) / Double(secondHalf.count) > firstHalf.reduce(0, +) / Double(firstHalf.count) + 4)
         #expect((data.previousTotals?.wpm ?? 0) < 61)
         let previousSpeeds = Statistics.byDay(data.previousSessions ?? [], calendar: .current).values.compactMap(\.wpm)
         #expect(previousSpeeds.count == 30)
-        #expect((previousSpeeds.max() ?? 0) - (previousSpeeds.min() ?? 0) < 2)
+        #expect((previousSpeeds.max() ?? 0) - (previousSpeeds.min() ?? 0) < 6.5)
         #expect((0.02...0.06).contains(data.totals.correctionRate ?? 0))
         let presses = tracker.pressCounts(in: try #require(data.interval))
         #expect(presses[USKeys.code(for: "e"), default: 0] > presses[USKeys.code(for: "z"), default: 0] * 5)

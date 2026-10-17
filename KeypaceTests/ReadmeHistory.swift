@@ -7,6 +7,9 @@ enum ReadmeHistory {
     static func fill(_ tracker: LiveTracker, endingAt end: Date, calendar: Calendar = .current) throws {
         guard let store = tracker.store else { preconditionFailure("Showcase history needs an in-memory store") }
         var generator = SeededGenerator(seed: 20261016)
+        // Each weekday hour keeps its own small lean across weeks, so the heatmap isn't striped by column.
+        var cellGenerator = SeededGenerator(seed: 7)
+        let cellBias = (0..<7).map { _ in (0..<24).map { _ in Double.random(in: -3.5...3.5, using: &cellGenerator) } }
         let firstDay = calendar.date(byAdding: .day, value: -59, to: calendar.startOfDay(for: end))!
         try store.noteKeyboard(SampleData.builtIn)
         try store.noteKeyboard(SampleData.mxKeys)
@@ -21,6 +24,8 @@ enum ReadmeHistory {
             let progress = Double(max(dayIndex - 30, 0)) / 29
             let target = dayIndex < 30 ? 59.5 + 0.6 * sin(Double(dayIndex) * 0.24)
                 : 62 + 10 * progress + 0.25 * sin(progress * .pi * 3)
+            // Real days wobble around the trend.
+            let dayTarget = target + Double.random(in: -2.4...2.4, using: &generator)
             var sessions: [(session: TypingSession, start: Date)] = []
 
             for hour in hours {
@@ -74,9 +79,9 @@ enum ReadmeHistory {
                 }
                 session.activeDuration *= Double(repeats)
                 let hourlyOffset = weekend ? Double(hour % 3) - 1
-                    : 9 * exp(-pow((Double(hour) - 11) / 2.3, 2)) - 0.45 * Double(hour - 8)
+                    : 9 * exp(-pow((Double(hour) - 11) / 2.3, 2)) - 0.45 * Double(hour - 8) + cellBias[weekday - 1][hour]
                 let variation = Double.random(in: -3...3, using: &generator)
-                let duration = Double(session.totals.netCharacters) * 12 / (target + hourlyOffset + variation)
+                let duration = Double(session.totals.netCharacters) * 12 / (dayTarget + hourlyOffset + variation)
                 let timingScale = duration / session.activeDuration
                 session.pairs = session.pairs.mapValues {
                     PairTiming(count: $0.count, totalMilliseconds: $0.totalMilliseconds * timingScale)
@@ -86,9 +91,9 @@ enum ReadmeHistory {
                 sessions.append((session, start))
             }
 
-            // Keep the day-by-day line smooth even though the mix of morning/evening sessions varies.
+            // Pin each day to its target even though the mix of morning/evening sessions varies.
             let totals = sessions.reduce(TypingTotals()) { $0 + $1.session.totals }
-            let scale = (totals.wpm ?? target) / target
+            let scale = (totals.wpm ?? dayTarget) / dayTarget
             for item in sessions {
                 var session = item.session
                 session.activeDuration *= scale
