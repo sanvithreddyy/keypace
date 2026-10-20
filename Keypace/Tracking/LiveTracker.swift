@@ -16,8 +16,10 @@ final class LiveTracker {
     }
 
     private(set) var status = Status.needsPermission
+    /// The open session and live speed are published once a second by `tick`, not per keystroke:
+    /// every menu-bar redraw costs about 10 ms of CPU.
     private(set) var current: TypingSession?
-    /// Speed over the last few seconds of typing; nil when not typing.
+    /// Speed over the last few seconds of typing, in whole words per minute as shown; nil when not typing.
     private(set) var liveWPM: Double?
     /// Bumped whenever stored history changes, so views reload.
     private(set) var revision = 0
@@ -250,15 +252,15 @@ final class LiveTracker {
         if let keyboard { seenKeyboards[keyboard.id] = keyboard }
         if let inputSource { seenInputSources[inputSource.id] = inputSource }
         if let closed = engine.record(press, in: context) { save(closed) }
-        current = engine.current
-        liveWPM = engine.live.wordsPerMinute(at: key.time)
     }
 
-    /// Closes an idle session and writes pending counts. Runs every second while capturing.
+    /// Closes an idle session, publishes the open session and live speed, and writes pending counts.
+    /// Runs every second while capturing.
     func tick() {
         if let closed = engine.closeIfIdle(at: clock.uptime()) { save(closed) }
         current = engine.current
-        liveWPM = engine.live.wordsPerMinute(at: clock.uptime())
+        // Rounded, so an unchanged number doesn't redraw the menu bar.
+        liveWPM = engine.live.wordsPerMinute(at: clock.uptime())?.rounded()
         ticks += 1
         if ticks % 60 == 0 { flushCounts() }
     }

@@ -11,6 +11,8 @@ final class KeyboardDevices {
 
     /// The keyboard behind the most recent key-down.
     private(set) var lastUsed: KeyboardRecord?
+    /// Each keyboard's identity, read once; reading its properties on every key-down costs far more than typing itself.
+    private var records: [IOHIDDevice: KeyboardRecord] = [:]
 
     func start() {
         guard !started else { return }
@@ -39,7 +41,10 @@ final class KeyboardDevices {
         let usage = IOHIDElementGetUsage(element)
         // Usages 4–231 are keys; 1 means pressed.
         guard (4...231).contains(usage), IOHIDValueGetIntegerValue(value) == 1 else { return }
-        lastUsed = Self.record(for: IOHIDElementGetDevice(element))
+        let device = IOHIDElementGetDevice(element)
+        if records[device] == nil { records[device] = Self.record(for: device) }
+        lastUsed = records[device]
+        lastUsed?.lastSeen = .now
     }
 
     private static func record(for device: IOHIDDevice) -> KeyboardRecord {

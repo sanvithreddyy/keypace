@@ -139,10 +139,11 @@ struct PipelineTests {
         let tracker = try makeTracker(clock: clock)
         let typist = Typist(tracker: tracker, clock: clock)
         typist.type("the quick brown fox", interval: 0.15)
-        // 19 characters 0.15 s apart: 18 counted over 2.7 s.
+        tracker.tick()
+        // 19 characters 0.15 s apart: 18 counted over 2.7 s, published in whole words per minute.
         let live = try #require(tracker.liveWPM)
         let expected: Double = 18.0 / 5 / (2.7 / 60)
-        #expect(abs(live - expected) < 1e-6)
+        #expect(live == expected.rounded())
         clock.advance(2.5)
         tracker.tick()
         #expect(tracker.liveWPM == nil)
@@ -170,8 +171,9 @@ struct PipelineTests {
         typist.type("abcdefghij")
         clock.advance(1.8) // With the next key's interval, a 2-second thinking pause.
         typist.type("abcdefghij")
+        tracker.tick()
         let live = try #require(tracker.liveWPM)
-        #expect(abs(live - 60) < 1e-6)
+        #expect(live == 60)
         typist.pause()
         #expect(tracker.liveWPM == nil)
         let saved = try #require(tracker.allSessions().first)
@@ -195,6 +197,7 @@ struct PipelineTests {
         tracker.handle(ObservedKey(keyCode: 51, time: clock.uptime, text: "\u{7F}", commandOrControl: false,
                                    command: false, option: true, isRepeat: false, sourceStateID: 1, sourceProcessID: 0),
                        appID: typist.appID, keyboard: typist.keyboard, inputSource: typist.inputSource)
+        tracker.tick()
         #expect(tracker.current?.deletions == removed)
         // Ownership of the remaining suffix must also match the next ordinary Delete.
         typist.type("⌫")
@@ -233,6 +236,7 @@ struct PipelineTests {
     @Test func `live speed clears when capture stops`() throws {
         let tracker = try makeTracker(clock: clock)
         Typist(tracker: tracker, clock: clock).type("the quick brown fox", interval: 0.15)
+        tracker.tick()
         #expect(tracker.liveWPM != nil)
         tracker.captureStopped()
         #expect(tracker.liveWPM == nil)

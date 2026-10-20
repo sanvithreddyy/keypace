@@ -101,7 +101,7 @@ struct SnapshotTests {
     func `live speed states`(state: String) throws {
         let typist = Typist(tracker: tracker, clock: clock)
         typist.type(state == "correcting" ? "teh⌫⌫he quick brown fox jumps" : "the quick brown fox jumps", interval: 0.12)
-        if state == "paused" { typist.pause(2.1) }
+        if state == "paused" { typist.pause(2.1) } else { tracker.tick() }
         #expect((tracker.liveWPM != nil) == (state != "paused"))
         #expect(tracker.current != nil)
 
