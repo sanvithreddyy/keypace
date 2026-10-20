@@ -67,8 +67,10 @@ release_dir="$PWD/build/release"
 app="$release_dir/DerivedData/Build/Products/Release/Keypace.app"
 mkdir -p "$release_dir"
 xcodegen generate --quiet
+# A plain build keeps symbols; stripping, dead-code removal and size optimization (on the packages too) more than halve the app.
 xcodebuild build -project Keypace.xcodeproj -scheme Keypace -configuration Release \
     -destination 'generic/platform=macOS' -derivedDataPath "$release_dir/DerivedData" -quiet \
+    DEPLOYMENT_POSTPROCESSING=YES DEAD_CODE_STRIPPING=YES SWIFT_OPTIMIZATION_LEVEL=-Osize \
     'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGN_STYLE=Manual \
     "CODE_SIGN_IDENTITY=$sign_hash" "DEVELOPMENT_TEAM=$KEYPACE_TEAM_ID" \
     ENABLE_HARDENED_RUNTIME=YES CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
