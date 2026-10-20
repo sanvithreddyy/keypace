@@ -16,6 +16,13 @@ struct KeypaceApp: App {
 
         Window("Keypace", id: "main") {
             MainWindow(tracker: tracker)
+                // A menu-bar app has no menus, and macOS hides the menu bar while one is in front.
+                // Act as a regular app while this window is open.
+                .onAppear {
+                    NSApp.setActivationPolicy(.regular)
+                    NSApp.activate()
+                }
+                .onDisappear { NSApp.setActivationPolicy(.accessory) }
         }
         .defaultSize(width: 900, height: 680)
 

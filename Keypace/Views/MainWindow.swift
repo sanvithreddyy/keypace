@@ -37,6 +37,8 @@ struct MainWindow: View {
             Self.detail(for: page ?? .overview, tracker: tracker)
         }
         .frame(minWidth: 760, minHeight: 560)
+        // Otherwise a solid bar appears behind the toolbar after the sidebar is toggled and while inactive.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
             Button("Live Metrics", systemImage: "gauge.with.needle") { openWindow(id: "live") }
                 .help("Show speed as you type in a floating window")

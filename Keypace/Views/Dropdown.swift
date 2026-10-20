@@ -52,6 +52,8 @@ struct Dropdown: View {
     }
 
     private func openMain() {
+        // The dropdown is the key window while its button is clicked; close it so it doesn't sit over the main window.
+        NSApp.keyWindow?.close()
         openWindow(id: "main")
         NSApp.activate()
     }
