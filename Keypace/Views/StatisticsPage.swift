@@ -160,6 +160,7 @@ private struct MetricChart: View {
     let sessions: [SessionRecord]
     let metric: StatisticsPage.Metric
     let hourly: Bool
+    @State private var hovered: Date?
 
     var body: some View {
         let calendar = Calendar.current
@@ -168,14 +169,22 @@ private struct MetricChart: View {
         }
         let points = grouped.compactMap { date, sessions in metric.value(Statistics.totals(sessions)).map { (date: date, value: $0) } }
             .sorted { $0.date < $1.date }
-        Chart(points, id: \.date) { point in
-            LineMark(x: .value("Date", point.date, unit: hourly ? .hour : .day), y: .value(metric.rawValue, point.value))
-                .interpolationMethod(.monotone)
-                .foregroundStyle(Color.primary)
-                .lineStyle(StrokeStyle(lineWidth: 1.6))
-            PointMark(x: .value("Date", point.date, unit: hourly ? .hour : .day), y: .value(metric.rawValue, point.value))
-                .symbolSize(12)
-                .foregroundStyle(Color.primary)
+        let hoveredPoint = hovered.flatMap { date in points.first { $0.date == date } }
+        Chart {
+            ForEach(points, id: \.date) { point in
+                LineMark(x: .value("Date", point.date, unit: hourly ? .hour : .day), y: .value(metric.rawValue, point.value))
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(Color.primary)
+                    .lineStyle(StrokeStyle(lineWidth: 1.6))
+                PointMark(x: .value("Date", point.date, unit: hourly ? .hour : .day), y: .value(metric.rawValue, point.value))
+                    .symbolSize(12)
+                    .foregroundStyle(Color.primary)
+            }
+            if let hoveredPoint {
+                RuleMark(x: .value("Date", hoveredPoint.date, unit: hourly ? .hour : .day))
+                    .foregroundStyle(.quaternary)
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+            }
         }
         .chartYScale(domain: .automatic(includesZero: metric == .corrections))
         .chartYAxis {
@@ -189,7 +198,37 @@ private struct MetricChart: View {
                 AxisValueLabel(format: hourly ? .dateTime.hour() : .dateTime.month(.abbreviated).day())
             }
         }
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                let plot = proxy.plotFrame.map { geometry[$0] } ?? .zero
+                Rectangle().fill(.clear).contentShape(.rect)
+                    .onContinuousHover { phase in
+                        guard case .active(let location) = phase, let date = proxy.value(atX: location.x - plot.minX, as: Date.self) else {
+                            hovered = nil
+                            return
+                        }
+                        // The nearest hour or day with typing, measured to the middle of each, where its mark is drawn.
+                        hovered = points.min { abs(center($0.date).timeIntervalSince(date)) < abs(center($1.date).timeIntervalSince(date)) }?.date
+                    }
+                if let hoveredPoint, let x = proxy.position(forX: center(hoveredPoint.date)), let y = proxy.position(forY: hoveredPoint.value) {
+                    HoverLabel(text: hoverText(hoveredPoint.date, hoveredPoint.value),
+                               target: CGRect(x: plot.minX + x, y: plot.minY + y - 4, width: 0, height: 0))
+                }
+            }
+        }
         .frame(height: 170)
+    }
+
+    /// Marks with a date unit are drawn in the middle of their hour or day.
+    private func center(_ date: Date) -> Date {
+        let interval = Calendar.current.dateInterval(of: hourly ? .hour : .day, for: date)!
+        return interval.start.addingTimeInterval(interval.duration / 2)
+    }
+
+    private func hoverText(_ date: Date, _ value: Double) -> String {
+        let when = hourly ? date.formatted(.dateTime.hour()) : date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        let amount = metric == .corrections ? "\(metric.format(value)) corrected" : "\(metric.format(value)) \(metric.rawValue.lowercased())"
+        return "\(when) · \(amount)"
     }
 }
 
@@ -201,7 +240,8 @@ private struct CalendarHeatmap: View {
     var body: some View {
         var calendar = Calendar.current
         let _ = calendar.firstWeekday = 2
-        let days = Statistics.byDay(sessions, calendar: calendar).compactMapValues(\.wpm)
+        let totals = Statistics.byDay(sessions, calendar: calendar)
+        let days = totals.compactMapValues(\.wpm)
         let fastest = days.max { $0.value < $1.value }
         let slowest = days.values.min() ?? 0
         let span = max((fastest?.value ?? 0) - slowest, 1)
@@ -222,13 +262,22 @@ private struct CalendarHeatmap: View {
                 VStack(spacing: 3) {
                     ForEach(0..<7, id: \.self) { row in
                         let day = calendar.date(byAdding: .day, value: week * 7 + row, to: firstWeek)!
-                        cell(day: day, wpm: days[day], isFastest: day == fastest?.key, inRange: day >= firstShown && day <= lastDay,
+                        let inRange = day >= firstShown && day <= lastDay
+                        cell(day: day, wpm: days[day], isFastest: day == fastest?.key, inRange: inRange,
                              shade: days[day].map { ($0 - slowest) / span } ?? 0)
+                            .hoverValue(inRange ? hoverText(day, totals[day]) : nil, cornerRadius: 3)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .hoverValues()
+    }
+
+    private func hoverText(_ day: Date, _ totals: TypingTotals?) -> String {
+        let when = day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        guard let totals, let wpm = totals.wpm else { return "\(when) · no typing" }
+        return "\(when) · \(Format.wpm(wpm)) wpm · \(Format.duration(totals.duration))"
     }
 
     @ViewBuilder
@@ -244,7 +293,6 @@ private struct CalendarHeatmap: View {
                             Text(Format.wpm(wpm)).font(.system(size: 9, weight: .bold)).foregroundStyle(Color(nsColor: .windowBackgroundColor))
                         }
                     }
-                    .help("\(day.formatted(date: .abbreviated, time: .omitted)): \(Format.wpm(wpm)) wpm")
             } else {
                 shape.strokeBorder(.quaternary, lineWidth: 1)
             }

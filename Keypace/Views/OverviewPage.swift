@@ -110,6 +110,7 @@ private struct StatRow: View {
 /// This period's speed in full ink with the previous period overlaid in gray, aligned by position.
 private struct SpeedChart: View {
     let data: PeriodData
+    @State private var hovered: Int?
 
     private struct Point: Identifiable {
         var series: String
@@ -125,16 +126,23 @@ private struct SpeedChart: View {
         // Whole tens with some room, so a single value or a flat day still gets a readable scale.
         let low = ((values.min() ?? 50) - 5) / 10
         let high = ((values.max() ?? 80) + 5) / 10
-        Chart(previous + current) { point in
-            LineMark(x: .value("Position", point.index), y: .value("WPM", point.wpm), series: .value("Series", point.series))
-                .interpolationMethod(.monotone)
-                .foregroundStyle(point.series == "Previous" ? Color.secondary.opacity(0.5) : Color.primary)
-                .lineStyle(StrokeStyle(lineWidth: point.series == "Previous" ? 1.2 : 1.6))
-            if point.series != "Previous" {
-                // Dots keep a lone hour or day visible, where a line has nothing to join.
-                PointMark(x: .value("Position", point.index), y: .value("WPM", point.wpm))
-                    .symbolSize(18)
-                    .foregroundStyle(Color.primary)
+        Chart {
+            ForEach(previous + current) { point in
+                LineMark(x: .value("Position", point.index), y: .value("WPM", point.wpm), series: .value("Series", point.series))
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(point.series == "Previous" ? Color.secondary.opacity(0.5) : Color.primary)
+                    .lineStyle(StrokeStyle(lineWidth: point.series == "Previous" ? 1.2 : 1.6))
+                if point.series != "Previous" {
+                    // Dots keep a lone hour or day visible, where a line has nothing to join.
+                    PointMark(x: .value("Position", point.index), y: .value("WPM", point.wpm))
+                        .symbolSize(18)
+                        .foregroundStyle(Color.primary)
+                }
+            }
+            if let hovered {
+                RuleMark(x: .value("Position", hovered))
+                    .foregroundStyle(.quaternary)
+                    .lineStyle(StrokeStyle(lineWidth: 1))
             }
         }
         .chartYScale(domain: low.rounded(.down) * 10...high.rounded(.up) * 10)
@@ -151,7 +159,36 @@ private struct SpeedChart: View {
             }
         }
         .chartXScale(domain: 0...max(slots - 1, 1))
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                let plot = proxy.plotFrame.map { geometry[$0] } ?? .zero
+                Rectangle().fill(.clear).contentShape(.rect)
+                    .onContinuousHover { phase in
+                        guard case .active(let location) = phase, let x = proxy.value(atX: location.x - plot.minX, as: Double.self) else {
+                            hovered = nil
+                            return
+                        }
+                        hovered = min(max(Int(x.rounded()), 0), max(slots - 1, 0))
+                    }
+                if let hovered {
+                    // Above this period's point, else the previous period's, else mid-plot.
+                    let wpm = (current.first { $0.index == hovered } ?? previous.first { $0.index == hovered })?.wpm
+                    let y = wpm.flatMap { proxy.position(forY: $0) } ?? plot.height / 2
+                    let x = proxy.position(forX: hovered) ?? 0
+                    HoverLabel(text: hoverText(hovered, current: current, previous: previous),
+                               target: CGRect(x: plot.minX + x, y: plot.minY + y - 4, width: 0, height: 0))
+                }
+            }
+        }
         .frame(height: 150)
+    }
+
+    private func hoverText(_ index: Int, current: [Point], previous: [Point]) -> String {
+        var parts = [label(for: index)]
+        let now = current.first { $0.index == index }?.wpm
+        parts.append(now.map { "\(Format.wpm($0)) wpm" } ?? "no typing")
+        if let before = previous.first(where: { $0.index == index })?.wpm { parts.append("previous \(Format.wpm(before))") }
+        return parts.joined(separator: " · ")
     }
 
     private var isHourly: Bool { data.period == .today }
@@ -185,7 +222,8 @@ private struct WeekHourHeatmap: View {
 
     var body: some View {
         let calendar = Calendar.current
-        let cells = Statistics.byWeekdayAndHour(sessions, calendar: calendar).compactMapValues(\.wpm)
+        let totals = Statistics.byWeekdayAndHour(sessions, calendar: calendar)
+        let cells = totals.compactMapValues(\.wpm)
         let fastest = cells.max { $0.value < $1.value }
         let slowest = cells.values.min() ?? 0
         let span = max((fastest?.value ?? 0) - slowest, 1)
@@ -215,10 +253,18 @@ private struct WeekHourHeatmap: View {
                     ForEach(hours, id: \.self) { hour in
                         let key = Statistics.WeekdayHour(weekday: weekday, hour: hour)
                         cell(wpm: cells[key], isFastest: key == fastest?.key, shade: cells[key].map { ($0 - slowest) / span } ?? 0)
+                            .hoverValue(hoverText(key, totals[key]), cornerRadius: 4)
                     }
                 }
             }
         }
+        .hoverValues()
+    }
+
+    private func hoverText(_ key: Statistics.WeekdayHour, _ totals: TypingTotals?) -> String {
+        let when = "\(Calendar.current.shortWeekdaySymbols[key.weekday - 1]) \(hourLabel(key.hour))"
+        guard let totals, let wpm = totals.wpm else { return "\(when) · no typing" }
+        return "\(when) · \(Format.wpm(wpm)) wpm · \(Format.duration(totals.duration))"
     }
 
     @ViewBuilder

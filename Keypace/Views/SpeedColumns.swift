@@ -8,6 +8,8 @@ import KeypaceCore
 struct SpeedColumns: View {
     struct Slot: Identifiable {
         let id: Int
+        /// The hour or day in full, for the hover label.
+        let name: String
         /// Axis label, or nil for slots without one.
         var label: String?
         var wpm: Double?
@@ -19,6 +21,7 @@ struct SpeedColumns: View {
     let average: Double?
     /// Whether the last slot is the hour or day in progress.
     var lastIsCurrent = true
+    @State private var hovered: Int?
 
     var body: some View {
         let best = slots.compactMap(\.wpm).max()
@@ -73,6 +76,20 @@ struct SpeedColumns: View {
                     Path { $0.addLines([CGPoint(x: 0, y: y(average)), CGPoint(x: plot.maxX, y: y(average))]) }
                         .stroke(Color.primary.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 }
+                if let hovered, slots.indices.contains(hovered), !slots[hovered].isFuture {
+                    let slot = slots[hovered]
+                    let top = slot.wpm.map(y) ?? plot.maxY
+                    HoverLabel(text: "\(slot.name) · \(slot.wpm.map { "\(Format.wpm($0)) wpm" } ?? "no typing")",
+                               target: CGRect(x: CGFloat(hovered) * slotWidth, y: top - 4, width: slotWidth, height: 0))
+                }
+            }
+            .contentShape(.rect)
+            .onContinuousHover { phase in
+                guard case .active(let location) = phase else {
+                    hovered = nil
+                    return
+                }
+                hovered = Int(location.x / slotWidth)
             }
         }
         .monospacedDigit()
@@ -91,7 +108,8 @@ struct SpeedColumns: View {
             let currentHour = calendar.component(.hour, from: now)
             return (0..<24).map { hour in
                 let label = hour % 6 == 0 ? calendar.date(bySettingHour: hour, minute: 0, second: 0, of: now)!.formatted(.dateTime.hour()) : nil
-                return Slot(id: hour, label: label, wpm: byHour[hour], isFuture: hour > currentHour)
+                let name = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: now)!.formatted(.dateTime.hour())
+                return Slot(id: hour, name: name, label: label, wpm: byHour[hour], isFuture: hour > currentHour)
             }
         }
         let byDay = Statistics.byDay(data.sessions, calendar: calendar).compactMapValues(\.wpm)
@@ -102,7 +120,7 @@ struct SpeedColumns: View {
             let label: String? = days <= 7
                 ? day.formatted(.dateTime.weekday(.abbreviated))
                 : (offset % 7 == 3 ? day.formatted(.dateTime.month(.abbreviated).day()) : nil)
-            return Slot(id: offset, label: label, wpm: byDay[day])
+            return Slot(id: offset, name: day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()), label: label, wpm: byDay[day])
         }
     }
 }

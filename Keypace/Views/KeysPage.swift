@@ -110,11 +110,28 @@ struct KeyboardHeatmap: View {
                     let isTop = key.keyCode == top?.key
                     cap(label: label(key.keyCode), value: value.map { $0 / highest }, isTop: isTop, caption: isTop ? caption(top!.value) : nil)
                         .frame(width: key.width * unit - 4, height: unit - 4)
+                        .hoverValue(hoverText(key.keyCode), cornerRadius: 5)
                         .offset(x: key.x * unit + 2, y: Double(key.row) * unit + 2)
                 }
             }
+            .hoverValues()
         }
         .aspectRatio(3, contentMode: .fit)
+    }
+
+    private func hoverText(_ keyCode: UInt16) -> String {
+        let name = label(keyCode)
+        let presses = keys[keyCode]?.presses ?? 0
+        guard presses > 0 else { return "\(name) · not pressed" }
+        let count = "\(presses.formatted()) \(presses == 1 ? "press" : "presses")"
+        switch mode {
+        case .usage:
+            let total = keys.values.reduce(0) { $0 + $1.presses }
+            return "\(name) · \(count) · \(Format.percent(Double(presses) / Double(max(total, 1))))"
+        case .corrections:
+            guard let rate = values[keyCode] else { return "\(name) · \(count)" }
+            return "\(name) · \(Format.percent(rate)) corrected · \(count)"
+        }
     }
 
     var values: [UInt16: Double] {
