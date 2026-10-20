@@ -6,6 +6,11 @@ import KeypaceCore
 struct KeypaceApp: App {
     @State private var tracker = LiveTracker.live()
 
+    init() {
+        // Before any window opens, so the chosen look shows from the first frame.
+        Appearance.saved.apply()
+    }
+
     var body: some Scene {
         MenuBarExtra {
             Dropdown(tracker: tracker).frame(width: Dropdown.width)

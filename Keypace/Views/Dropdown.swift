@@ -48,7 +48,6 @@ struct Dropdown: View {
         .padding(14)
         .monospacedDigit()
         .background(Theme.panelTint)
-        .environment(\.colorScheme, .dark)
     }
 
     private func openMain() {
@@ -127,7 +126,7 @@ private struct Panel<Content: View>: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.surface, in: .rect(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.05)))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.hairline))
     }
 }
 
@@ -191,8 +190,8 @@ private struct FooterButtonStyle: ButtonStyle {
         configuration.label
             .font(.callout.weight(.medium))
             .frame(maxWidth: .infinity, minHeight: 32)
-            .background(Color.white.opacity(configuration.isPressed ? 0.12 : 0.05), in: .rect(cornerRadius: 9))
-            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.white.opacity(0.1)))
+            .background(configuration.isPressed ? Theme.controlPressed : Theme.control, in: .rect(cornerRadius: 9))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.controlBorder))
             .contentShape(.rect(cornerRadius: 9))
     }
 }

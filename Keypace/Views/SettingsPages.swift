@@ -10,9 +10,19 @@ struct GeneralSettingsPage: View {
     @State private var loginError: String?
     @AppStorage("menuBarFormat") private var menuBarFormat = MenuBarFormat.withUnit
     @AppStorage("menuBarNumber") private var menuBarNumber = MenuBarNumber.liveThenToday
+    @AppStorage(Appearance.key) private var appearance = Appearance.light
 
     var body: some View {
         SettingsPage(title: "General") {
+            SettingsSection("Appearance") {
+                SettingsRow("Theme") {
+                    Picker("Theme", selection: $appearance) {
+                        ForEach(Appearance.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .segmentedStyle()
+                    .onChange(of: appearance) { _, appearance in appearance.apply() }
+                }
+            }
             SettingsSection("Speed") {
                 SettingsRow("New session after a pause of", value: "\(Int(tracker.inactivityTimeout)) s",
                             description: "A longer pause ends the session; switching apps, keyboards or layouts does too.") {
@@ -218,7 +228,7 @@ private struct SettingsSection<Content: View>: View {
                 }
             }
             .padding(.horizontal, 14)
-            .background(.white.opacity(0.05), in: .rect(cornerRadius: 12))
+            .background(Theme.group, in: .rect(cornerRadius: 12))
         }
         .padding(.top, 20)
     }
