@@ -42,6 +42,25 @@ left out. Keypace never stores what you type, only counts and timings.
 
 ## Install
 
+### With Homebrew
+
+```
+brew tap sanvithreddyy/keypace
+brew install keypace
+```
+
+Or in one command:
+
+```
+brew install sanvithreddyy/keypace/keypace
+```
+
+Homebrew installs the same release, opens it without the Open Anyway step, and
+`brew upgrade` keeps it current. Allow Keypace under **Input Monitoring** when
+asked.
+
+### From the download
+
 1. Download `Keypace-<version>.dmg` from
    [Releases](https://github.com/sanvithreddyy/keypace/releases/latest) and drag
    Keypace to Applications.
