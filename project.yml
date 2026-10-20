@@ -28,14 +28,14 @@ targets:
       path: Keypace/Info.plist
       properties:
         CFBundleDisplayName: Keypace
-        CFBundleShortVersionString: "0.1"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.2"
+        CFBundleVersion: "2"
         LSUIElement: true
         LSMinimumSystemVersion: "15.0"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sanvith.keypace
-        MARKETING_VERSION: "0.1"
+        MARKETING_VERSION: "0.2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
         Release:
