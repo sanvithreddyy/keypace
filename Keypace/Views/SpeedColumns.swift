@@ -15,6 +15,8 @@ struct SpeedColumns: View {
         var wpm: Double?
         /// Slots still to come, like later hours today.
         var isFuture = false
+        /// The hover label's text when the slot has no speed.
+        var empty = "no typing"
     }
 
     let slots: [Slot]
@@ -79,7 +81,7 @@ struct SpeedColumns: View {
                 if let hovered, slots.indices.contains(hovered), !slots[hovered].isFuture {
                     let slot = slots[hovered]
                     let top = slot.wpm.map(y) ?? plot.maxY
-                    HoverLabel(text: "\(slot.name) · \(slot.wpm.map { "\(Format.wpm($0)) wpm" } ?? "no typing")",
+                    HoverLabel(text: "\(slot.name) · \(slot.wpm.map { "\(Format.wpm($0)) wpm" } ?? slot.empty)",
                                target: CGRect(x: CGFloat(hovered) * slotWidth, y: top - 4, width: slotWidth, height: 0))
                 }
             }
@@ -103,16 +105,25 @@ struct SpeedColumns: View {
     /// Slots for a period: all 24 hours of today, or the period's days.
     static func slots(for data: PeriodData, now: Date = .now, calendar: Calendar = .current) -> [Slot] {
         guard let interval = data.interval else { return [] }
+        // In voice mode a slot without speed may still have dictations the app couldn't time.
+        let empty = { (words: Int?) -> String in
+            guard data.mode == .voice else { return "no typing" }
+            guard let words, words > 0 else { return "no dictation" }
+            return "\(words.formatted()) words, speed not recorded"
+        }
         if data.period == .today {
+            let wordsByHour = VoiceStatistics.byHourOfDay(data.dictations, calendar: calendar).mapValues(\.words)
             let byHour = Statistics.byHourOfDay(data.sessions, calendar: calendar).compactMapValues(\.wpm)
             let currentHour = calendar.component(.hour, from: now)
             return (0..<24).map { hour in
                 let label = hour % 6 == 0 ? calendar.date(bySettingHour: hour, minute: 0, second: 0, of: now)!.formatted(.dateTime.hour()) : nil
                 let name = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: now)!.formatted(.dateTime.hour())
-                return Slot(id: hour, name: name, label: label, wpm: byHour[hour], isFuture: hour > currentHour)
+                return Slot(id: hour, name: name, label: label, wpm: byHour[hour], isFuture: hour > currentHour,
+                            empty: empty(wordsByHour[hour]))
             }
         }
         let byDay = Statistics.byDay(data.sessions, calendar: calendar).compactMapValues(\.wpm)
+        let wordsByDay = VoiceStatistics.byDay(data.dictations, calendar: calendar).mapValues(\.words)
         let days = calendar.dateComponents([.day], from: interval.start, to: interval.end).day ?? 0
         return (0..<days).map { offset in
             let day = calendar.date(byAdding: .day, value: offset, to: interval.start)!
@@ -120,7 +131,8 @@ struct SpeedColumns: View {
             let label: String? = days <= 7
                 ? day.formatted(.dateTime.weekday(.abbreviated))
                 : (offset % 7 == 3 ? day.formatted(.dateTime.month(.abbreviated).day()) : nil)
-            return Slot(id: offset, name: day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()), label: label, wpm: byDay[day])
+            return Slot(id: offset, name: day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()), label: label, wpm: byDay[day],
+                        empty: empty(wordsByDay[day]))
         }
     }
 }
