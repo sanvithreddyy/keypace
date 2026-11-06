@@ -81,6 +81,4 @@ extension Period {
 extension Mode {
     /// What the time measured is called: "Typing time", "Talking time".
     var timeLabel: String { self == .typing ? "Typing time" : "Talking time" }
-    /// "No typing", "No dictation".
-    var nothing: String { self == .typing ? "no typing" : "no dictation" }
 }

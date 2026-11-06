@@ -154,6 +154,32 @@ struct VoiceRecordsTests {
         #expect(sources.last?.totals.dictations == 2)
     }
 
+    @Test func `pace bands, median and how many beat a speed`() {
+        let dictations = [
+            dictation(at: monday, words: 20, seconds: 10),   // 120 wpm
+            dictation(at: monday, words: 25, seconds: 10),   // 150
+            dictation(at: monday, words: 26, seconds: 10),   // 156
+            dictation(at: monday, words: 10, seconds: 10),   // 60
+            dictation(at: monday, words: 30, seconds: 3),    // too short to pace
+            dictation(at: monday, words: 900, seconds: nil),
+        ]
+        #expect(VoiceStatistics.paceBands(dictations).map(\.lower) == [60, 80, 100, 120, 140])
+        #expect(VoiceStatistics.paceBands(dictations).map(\.count) == [1, 0, 0, 1, 2])
+        #expect(VoiceStatistics.medianWPM(dictations) == 135)
+        let faster = VoiceStatistics.faster(than: 61, dictations)
+        #expect(faster.count == 3 && faster.of == 4)
+    }
+
+    @Test func `lengths group by words and skip empty ones`() {
+        let lengths = VoiceStatistics.byLength([
+            dictation(at: monday, words: 5, seconds: 6),
+            dictation(at: monday, words: 150, seconds: 60),
+            dictation(at: monday, words: 101, seconds: 40),
+        ])
+        #expect(lengths.map(\.length) == [.short, .veryLong])
+        #expect(lengths.last?.totals.words == 251)
+    }
+
     @Test func `streaks count days with dictation`() {
         let calendar = Calendar(identifier: .gregorian)
         let starts = [monday, monday.addingTimeInterval(86_400), monday.addingTimeInterval(3 * 86_400)]
