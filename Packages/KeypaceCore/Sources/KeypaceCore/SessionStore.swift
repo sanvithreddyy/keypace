@@ -186,6 +186,17 @@ public struct SessionStore: Sendable {
                 t.primaryKey(["hour", "appID", "keyboardID", "inputSourceID", "keyCode"])
             }
         }
+        migrator.registerMigration("v7-dictation") { db in
+            try db.create(table: "dictation") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("start", .datetime).notNull().indexed()
+                t.column("end", .datetime).notNull()
+                t.column("appID", .text).notNull().indexed()
+                t.column("sourceID", .text).notNull()
+                t.column("words", .integer).notNull()
+                t.column("speakingSeconds", .double)
+            }
+        }
         return migrator
     }
 
@@ -373,20 +384,51 @@ public struct SessionStore: Sendable {
         return try db.read { db in try Int.fetchOne(db, sql: sql, arguments: StatementArguments(arguments)) ?? 0 }
     }
 
+    // MARK: Dictation
+
+    @discardableResult
+    public func save(_ dictation: DictationRecord) throws -> DictationRecord {
+        try db.write { db in try dictation.inserted(db) }
+    }
+
+    /// Dictations that started inside the interval, oldest first.
+    public func dictations(in interval: DateInterval) throws -> [DictationRecord] {
+        try db.read { db in
+            try DictationRecord
+                .filter(Column("start") >= interval.start && Column("start") < interval.end)
+                .order(Column("start"))
+                .fetchAll(db)
+        }
+    }
+
+    public func allDictations() throws -> [DictationRecord] {
+        try db.read { db in try DictationRecord.order(Column("start")).fetchAll(db) }
+    }
+
+    public func firstDictationStart() throws -> Date? {
+        try db.read { db in try Date.fetchOne(db, sql: "SELECT MIN(start) FROM dictation") }
+    }
+
+    public func deleteAllDictations() throws {
+        try db.write { db in try db.execute(sql: "DELETE FROM dictation") }
+    }
+
     // MARK: Deletion
 
-    /// Deletes an app's sessions, with their key and pair statistics, and its press and filtered-input counts.
+    /// Deletes an app's sessions, with their key and pair statistics, its press and filtered-input
+    /// counts, and dictations into it.
     public func deleteSessions(appID: String) throws {
         try db.write { db in
             _ = try SessionRecord.filter(Column("appID") == appID).deleteAll(db)
             try db.execute(sql: "DELETE FROM syntheticStat WHERE appID = ?", arguments: [appID])
             try db.execute(sql: "DELETE FROM pressStat WHERE appID = ?", arguments: [appID])
+            try db.execute(sql: "DELETE FROM dictation WHERE appID = ?", arguments: [appID])
         }
     }
 
     public func deleteAll() throws {
         try db.write { db in
-            for table in ["session", "syntheticStat", "pressStat", "keyboard", "inputSource"] {
+            for table in ["session", "syntheticStat", "pressStat", "keyboard", "inputSource", "dictation"] {
                 try db.execute(sql: "DELETE FROM \(table)")
             }
         }

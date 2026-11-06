@@ -47,7 +47,12 @@ public enum Statistics {
     /// Consecutive days with typing. The current streak survives until today ends, so it counts
     /// back from today if you've typed today, otherwise from yesterday.
     public static func streaks(_ sessions: [SessionRecord], today: Date, calendar: Calendar) -> (current: Int, longest: Int) {
-        let days = Set(sessions.map { calendar.startOfDay(for: $0.start) })
+        streaks(starts: sessions.map(\.start), today: today, calendar: calendar)
+    }
+
+    /// Streaks over any activity, given when each piece of it started.
+    public static func streaks(starts: [Date], today: Date, calendar: Calendar) -> (current: Int, longest: Int) {
+        let days = Set(starts.map { calendar.startOfDay(for: $0) })
         let todayStart = calendar.startOfDay(for: today)
 
         var current = 0
