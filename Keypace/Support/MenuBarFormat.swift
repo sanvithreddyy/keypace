@@ -29,3 +29,25 @@ enum MenuBarNumber: String, CaseIterable {
         }
     }
 }
+
+/// Which speeds the menu bar shows when both typing and voice are measured.
+enum MenuBarSpeeds: String, CaseIterable {
+    case typing, voice, both
+
+    var title: String {
+        switch self {
+        case .typing: "Typing"
+        case .voice: "Voice"
+        case .both: "Both"
+        }
+    }
+
+    /// What it shows given what is measured.
+    func shown(for measure: Measure) -> MenuBarSpeeds {
+        switch measure {
+        case .typing: .typing
+        case .voice: .voice
+        case .both: self
+        }
+    }
+}

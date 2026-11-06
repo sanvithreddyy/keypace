@@ -134,6 +134,52 @@ struct SnapshotTests {
         try render(Dropdown(tracker: tracker).frame(width: Dropdown.width), size: CGSize(width: Dropdown.width, height: 640), name: "dropdown-\(tab)-\(period)")
     }
 
+    /// Thirty days of dictation at 120–160 wpm, a few to a dozen a day.
+    private func fillVoice() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let apps = ["com.apple.Notes", "com.apple.MobileSMS", "com.apple.mail", "com.apple.Safari"]
+        for day in 0..<30 {
+            let date = calendar.date(byAdding: .day, value: -day, to: today)!
+            let count = 4 + (day * 7) % 9
+            for index in 0..<count {
+                let hour = 9 + (index * 5 + day) % 12
+                let start = calendar.date(bySettingHour: hour, minute: (index * 13) % 60, second: 0, of: date)!
+                guard start < .now else { continue }
+                let words = 20 + (index * 37 + day * 11) % 180
+                let wpm = 120 + Double((index * 17 + day * 5) % 40)
+                try? tracker.store?.save(DictationRecord(
+                    start: start, end: start.addingTimeInterval(Double(words) / wpm * 60), appID: apps[(index + day) % apps.count],
+                    sourceID: "com.example.dictation", words: words, speakingSeconds: Double(words) / wpm * 60))
+            }
+        }
+    }
+
+    @Test(arguments: [MainWindow.Page.overview, .statistics, .apps, .records])
+    func `voice page`(page: MainWindow.Page) throws {
+        fillVoice()
+        UserDefaults.standard.set(Period.month.rawValue, forKey: "overviewPeriod")
+        defer { UserDefaults.standard.removeObject(forKey: "overviewPeriod") }
+        try render(MainWindow.detail(for: page, tracker: tracker, mode: .voice), size: CGSize(width: 780, height: 1000), name: "voice-page-\(page)", scheme: .light)
+    }
+
+    @Test(arguments: [Dropdown.Tab.speed, .apps, .records])
+    func `voice dropdown`(tab: Dropdown.Tab) throws {
+        fillVoice()
+        let defaults = UserDefaults.standard
+        defaults.set(tab.rawValue, forKey: "dropdownTab")
+        defaults.set(Period.today.rawValue, forKey: "dropdownPeriod")
+        defaults.set(Mode.voice.rawValue, forKey: "mode")
+        defer { ["dropdownTab", "dropdownPeriod", "mode"].forEach(defaults.removeObject(forKey:)) }
+        let needed = NSHostingController(rootView: Dropdown(tracker: tracker)).sizeThatFits(in: CGSize(width: Dropdown.width, height: 2000))
+        #expect(needed.width <= Dropdown.width + 0.5, "\(tab) tab needs \(needed.width) pt")
+        try render(Dropdown(tracker: tracker).frame(width: Dropdown.width), size: CGSize(width: Dropdown.width, height: 680), name: "voice-dropdown-\(tab)", scheme: .light)
+    }
+
+    @Test func `voice settings`() throws {
+        try render(GeneralSettingsPage(tracker: tracker), size: CGSize(width: 780, height: 1500), name: "voice-settings", scheme: .light)
+    }
+
     private func renderMetrics(name: String) throws {
         let metrics = LiveMetrics(tracker: tracker)
         let needed = NSHostingController(rootView: metrics).sizeThatFits(in: CGSize(width: 220, height: 2000))
@@ -229,11 +275,11 @@ struct SnapshotTests {
         try png.write(to: Self.output.appending(path: "readme-\(page.rawValue.lowercased()).png"))
     }
 
-    private func render(_ view: some View, size: CGSize, name: String) throws {
-        let hosting = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)).environment(\.colorScheme, .dark))
+    private func render(_ view: some View, size: CGSize, name: String, scheme: ColorScheme = .dark) throws {
+        let hosting = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)).environment(\.colorScheme, scheme))
         hosting.frame = CGRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.appearance = NSAppearance(named: .darkAqua)
+        window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
         window.contentView = hosting
         hosting.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: .now.addingTimeInterval(0.3))

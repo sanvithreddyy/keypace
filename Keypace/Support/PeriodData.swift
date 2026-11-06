@@ -1,29 +1,50 @@
 import Foundation
 import KeypaceCore
 
-/// Sessions for a period and for the period before it.
+/// Sessions for a period and for the period before it. In voice mode the sessions are the
+/// dictations' speed samples, so the speed charts read the same, and the dictations come along
+/// for word counts.
 struct PeriodData {
     var period: Period
+    var mode: Mode
     var interval: DateInterval?
     var previousInterval: DateInterval?
     var sessions: [SessionRecord] = []
     var previousSessions: [SessionRecord]?
+    var dictations: [DictationRecord] = []
+    var previousDictations: [DictationRecord]?
 
     var totals: TypingTotals { Statistics.totals(sessions) }
     var previousTotals: TypingTotals? { previousSessions.map(Statistics.totals) }
+    var voice: VoiceTotals { VoiceTotals(dictations) }
+    var previousVoice: VoiceTotals? { previousDictations.map(VoiceTotals.init) }
 
     @MainActor
-    init(_ period: Period, tracker: LiveTracker, now: Date = .now, calendar: Calendar = .current) {
+    init(_ period: Period, tracker: LiveTracker, mode: Mode = .typing, now: Date = .now, calendar: Calendar = .current) {
         self.period = period
-        interval = period.interval(now: now, calendar: calendar, firstSession: tracker.firstHistoryStart())
+        self.mode = mode
+        let first = mode == .voice ? tracker.firstDictationStart() : tracker.firstHistoryStart()
+        interval = period.interval(now: now, calendar: calendar, firstSession: first)
         previousInterval = period.previous(now: now, calendar: calendar)
-        if let interval {
-            sessions = tracker.sessions(in: interval)
-        }
-        if let previousInterval {
-            previousSessions = tracker.sessions(in: previousInterval)
+        switch mode {
+        case .typing:
+            if let interval { sessions = tracker.sessions(in: interval) }
+            if let previousInterval { previousSessions = tracker.sessions(in: previousInterval) }
+        case .voice:
+            if let interval {
+                dictations = tracker.dictations(in: interval)
+                sessions = dictations.compactMap(\.speedSample)
+            }
+            if let previousInterval {
+                let previous = tracker.dictations(in: previousInterval)
+                previousDictations = previous
+                previousSessions = previous.compactMap(\.speedSample)
+            }
         }
     }
+
+    /// Nothing recorded in the period.
+    var isEmpty: Bool { mode == .voice ? dictations.isEmpty : sessions.isEmpty }
 }
 
 extension Period {
@@ -55,4 +76,11 @@ extension Period {
         case .allTime: ""
         }
     }
+}
+
+extension Mode {
+    /// What the time measured is called: "Typing time", "Talking time".
+    var timeLabel: String { self == .typing ? "Typing time" : "Talking time" }
+    /// "No typing", "No dictation".
+    var nothing: String { self == .typing ? "no typing" : "no dictation" }
 }

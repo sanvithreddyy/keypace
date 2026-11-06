@@ -10,10 +10,20 @@ struct GeneralSettingsPage: View {
     @State private var loginError: String?
     @AppStorage("menuBarFormat") private var menuBarFormat = MenuBarFormat.withUnit
     @AppStorage("menuBarNumber") private var menuBarNumber = MenuBarNumber.liveThenToday
+    @AppStorage("menuBarSpeeds") private var menuBarSpeeds = MenuBarSpeeds.both
     @AppStorage(Appearance.key) private var appearance = Appearance.light
+    @State private var confirmingVoiceReset = false
 
     var body: some View {
         SettingsPage(title: "General") {
+            SettingsSection("Measure") {
+                SettingsRow("Measure", description: tracker.measure.description) {
+                    Picker("Measure", selection: $tracker.measure) {
+                        ForEach(Measure.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .segmentedStyle()
+                }
+            }
             SettingsSection("Appearance") {
                 SettingsRow("Theme") {
                     Picker("Theme", selection: $appearance) {
@@ -34,6 +44,14 @@ struct GeneralSettingsPage: View {
                 }
             }
             SettingsSection("Menu bar") {
+                if tracker.measure == .both {
+                    SettingsRow("Speeds", description: "Speaking speed shows after a microphone icon, as today's average.") {
+                        Picker("Speeds", selection: $menuBarSpeeds) {
+                            ForEach(MenuBarSpeeds.allCases, id: \.self) { Text($0.title).tag($0) }
+                        }
+                        .segmentedStyle()
+                    }
+                }
                 SettingsRow("Show") {
                     Picker("Show", selection: $menuBarFormat) {
                         ForEach(MenuBarFormat.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -48,6 +66,14 @@ struct GeneralSettingsPage: View {
                 }
                 SettingsRow("Open at login", description: loginError) {
                     Toggle("Open at login", isOn: launchAtLogin).toggleStyle(.switch).labelsHidden()
+                }
+            }
+            if tracker.measure.voice {
+                SettingsSection("Voice") {
+                    SettingsRow("Dictation apps", description: "Any app that records and then pastes or types its text counts. Keypace counts the words and keeps no text or audio. macOS Dictation isn't counted.") { EmptyView() }
+                    SettingsRow("Delete all voice history", description: "Removes every dictation from this Mac. Typing history stays.") {
+                        Button("Delete…", role: .destructive) { confirmingVoiceReset = true }
+                    }
                 }
             }
             SettingsSection("Input from other software") {
@@ -67,13 +93,18 @@ struct GeneralSettingsPage: View {
                 SettingsRow("Export every session as CSV", description: exportError) {
                     Button("Export…", action: export)
                 }
-                SettingsRow("Delete all typing history", description: "Removes every session and statistic from this Mac. This can't be undone.") {
+                SettingsRow("Delete all history", description: "Removes every session, dictation and statistic from this Mac. This can't be undone.") {
                     Button("Delete…", role: .destructive) { confirmingReset = true }
                 }
             }
         }
-        .confirmationDialog("Delete all typing history?", isPresented: $confirmingReset) {
+        .confirmationDialog("Delete all history?", isPresented: $confirmingReset) {
             Button("Delete All History", role: .destructive) { tracker.deleteAllHistory() }
+        } message: {
+            Text("This can't be undone.")
+        }
+        .confirmationDialog("Delete all voice history?", isPresented: $confirmingVoiceReset) {
+            Button("Delete Voice History", role: .destructive) { tracker.deleteVoiceHistory() }
         } message: {
             Text("This can't be undone.")
         }

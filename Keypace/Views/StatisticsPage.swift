@@ -4,6 +4,7 @@ import KeypaceCore
 
 struct StatisticsPage: View {
     let tracker: LiveTracker
+    var mode = Mode.typing
 
     enum Metric: String, CaseIterable {
         case wpm = "WPM", cpm = "CPM", kpm = "KPM", corrections = "Corrections"
@@ -34,39 +35,60 @@ struct StatisticsPage: View {
     var body: some View {
         let _ = tracker.revision
         let interval = self.interval
-        let sessions = interval.map { tracker.sessions(in: $0).filter(matchesFilters) } ?? []
+        let allDictations = mode == .voice ? interval.map { tracker.dictations(in: $0) } ?? [] : []
+        let dictations = allDictations.filter { appID == nil || $0.appID == appID }
+        let sessions = mode == .voice
+            ? dictations.compactMap(\.speedSample)
+            : interval.map { tracker.sessions(in: $0).filter(matchesFilters) } ?? []
         let totals = Statistics.totals(sessions)
+        let apps = mode == .voice
+            ? VoiceStatistics.byApp(allDictations).map(\.appID)
+            : interval.map { Statistics.byApp(tracker.sessions(in: $0)).map(\.appID) } ?? []
 
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header.padding(.bottom, 12)
-                filters(apps: interval.map { Statistics.byApp(tracker.sessions(in: $0)).map(\.appID) } ?? [])
-                if sessions.isEmpty {
-                    Text("No typing recorded in this range.").foregroundStyle(.secondary).padding(.top, 16)
+                filters(apps: apps)
+                if mode == .voice ? dictations.isEmpty : sessions.isEmpty {
+                    Text(mode == .voice ? "No dictation recorded in this range." : "No typing recorded in this range.")
+                        .foregroundStyle(.secondary).padding(.top, 16)
                 } else {
-                    statRow(totals: totals, interval: interval).padding(.top, 16)
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(isHourly ? "By hour" : "By day").font(.headline)
-                        Spacer()
-                        Picker("Metric", selection: $metric) {
-                            ForEach(Metric.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    Group {
+                        if mode == .voice {
+                            voiceStatRow(VoiceTotals(dictations))
+                        } else {
+                            statRow(totals: totals, interval: interval)
                         }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
                     }
-                    .padding(.top, 24)
-                    .padding(.bottom, 10)
-                    MetricChart(sessions: sessions, metric: metric, hourly: isHourly)
-                    if !isHourly, let interval {
-                        SectionHeading(title: "Daily speed", detail: "Each day shaded by its average wpm")
-                        CalendarHeatmap(sessions: sessions, interval: interval)
-                    }
-                    SectionHeading(title: "By weekday", detail: "Typing time · wpm, fastest in bold")
-                    WeekdayBars(sessions: sessions)
-                    if !isHourly {
-                        SectionHeading(title: "By month", detail: "Typing time")
-                        MonthBars(sessions: sessions)
+                    .padding(.top, 16)
+                    if !sessions.isEmpty {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(isHourly ? "By hour" : "By day").font(.headline)
+                            Spacer()
+                            if mode == .typing {
+                                Picker("Metric", selection: $metric) {
+                                    ForEach(Metric.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                }
+                                .pickerStyle(.segmented)
+                                .labelsHidden()
+                                .fixedSize()
+                            } else {
+                                Text("Speaking wpm").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.top, 24)
+                        .padding(.bottom, 10)
+                        MetricChart(sessions: sessions, metric: mode == .voice ? .wpm : metric, hourly: isHourly)
+                        if !isHourly, let interval {
+                            SectionHeading(title: "Daily speed", detail: "Each day shaded by its average wpm")
+                            CalendarHeatmap(sessions: sessions, interval: interval)
+                        }
+                        SectionHeading(title: "By weekday", detail: "\(mode.timeLabel) · wpm, fastest in bold")
+                        WeekdayBars(sessions: sessions)
+                        if !isHourly {
+                            SectionHeading(title: "By month", detail: mode.timeLabel)
+                            MonthBars(sessions: sessions)
+                        }
                     }
                 }
             }
@@ -106,7 +128,9 @@ struct StatisticsPage: View {
                 }
                 .labelsHidden()
             }
-            DeviceFilters(tracker: tracker, keyboardID: $keyboardID, inputSourceID: $inputSourceID)
+            if mode == .typing {
+                DeviceFilters(tracker: tracker, keyboardID: $keyboardID, inputSourceID: $inputSourceID)
+            }
         }
         .fixedSize()
     }
@@ -137,6 +161,26 @@ struct StatisticsPage: View {
         }
     }
 
+    private func voiceStatRow(_ totals: VoiceTotals) -> some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(alignment: .top, spacing: 0) {
+                StatBlock(label: "Speaking WPM", value: Format.wpm(totals.wpm))
+                    .help("Words per minute of open microphone, thinking pauses included.")
+                Divider()
+                StatBlock(label: "Words", value: totals.words.formatted())
+                Divider()
+                StatBlock(label: "Talking time", value: Format.duration(totals.speakingSeconds))
+                Divider()
+                StatBlock(label: "Dictations", value: totals.dictations.formatted())
+                Divider()
+                StatBlock(label: "Words per dictation", value: totals.averageWords.map { "\(Int($0.rounded()))" } ?? "–")
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Divider()
+        }
+    }
+
     private var isHourly: Bool { !isCustom && period == .today }
 
     private var interval: DateInterval? {
@@ -145,7 +189,7 @@ struct StatisticsPage: View {
             let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: customEnd))!
             return DateInterval(start: calendar.startOfDay(for: customStart), end: end)
         }
-        return period.interval(now: .now, calendar: calendar, firstSession: tracker.firstHistoryStart())
+        return period.interval(now: .now, calendar: calendar, firstSession: mode == .voice ? tracker.firstDictationStart() : tracker.firstHistoryStart())
     }
 
     private func matchesFilters(_ session: SessionRecord) -> Bool {

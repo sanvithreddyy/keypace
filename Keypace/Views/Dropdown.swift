@@ -1,7 +1,7 @@
 import SwiftUI
 import KeypaceCore
 
-/// The menu-bar dropdown: icon tabs for speed, keys, apps and records, over a shared period.
+/// The menu-bar dropdown: typing or voice, then icon tabs for speed, keys, apps and records, over a shared period.
 struct Dropdown: View {
     /// The panel's width; content must fit inside it.
     static let width: CGFloat = 340
@@ -9,6 +9,7 @@ struct Dropdown: View {
     let tracker: LiveTracker
     @AppStorage("dropdownTab") private var tab = Tab.speed
     @AppStorage("dropdownPeriod") private var period = Period.today
+    @AppStorage("mode") private var mode = Mode.typing
     @Environment(\.openWindow) private var openWindow
 
     enum Tab: String, CaseIterable {
@@ -24,6 +25,10 @@ struct Dropdown: View {
         }
 
         var title: String { rawValue.capitalized }
+
+        static func available(in mode: Mode) -> [Tab] {
+            mode == .voice ? [.speed, .apps, .records] : allCases
+        }
     }
 
     var body: some View {
@@ -31,13 +36,21 @@ struct Dropdown: View {
             if tracker.status == .needsPermission {
                 PermissionPrompt(tracker: tracker)
             } else {
-                TabBar(selection: $tab)
-                let data = { _ = tracker.revision; return PeriodData(period, tracker: tracker) }()
-                switch tab {
-                case .speed: SpeedTab(tracker: tracker, data: data, period: $period)
-                case .keys: KeysTab(tracker: tracker, data: data, period: $period)
-                case .apps: AppsTab(data: data, period: $period)
-                case .records: RecordsTab(tracker: tracker)
+                let shown = mode.shown(for: tracker.measure)
+                if tracker.measure == .both {
+                    ModeBar(selection: $mode, current: shown).padding(.bottom, 8)
+                }
+                let tabs = Tab.available(in: shown)
+                let current = tabs.contains(tab) ? tab : .speed
+                TabBar(selection: $tab, tabs: tabs, current: current)
+                let data = { _ = tracker.revision; return PeriodData(period, tracker: tracker, mode: shown) }()
+                switch (current, shown) {
+                case (.speed, .voice): VoiceSpeedTab(tracker: tracker, data: data, period: $period)
+                case (.speed, _): SpeedTab(tracker: tracker, data: data, period: $period)
+                case (.keys, _): KeysTab(tracker: tracker, data: data, period: $period)
+                case (.apps, _): AppsTab(data: data, period: $period)
+                case (.records, .voice): VoiceRecordsTab(tracker: tracker)
+                case (.records, _): RecordsTab(tracker: tracker)
                 }
             }
             if let error = tracker.storageError {
@@ -62,16 +75,19 @@ struct Dropdown: View {
 
 private struct TabBar: View {
     @Binding var selection: Dropdown.Tab
+    let tabs: [Dropdown.Tab]
+    /// The tab showing; the stored one when it's available in this mode.
+    let current: Dropdown.Tab
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(Dropdown.Tab.allCases, id: \.self) { tab in
+            ForEach(tabs, id: \.self) { tab in
                 Button { selection = tab } label: {
                     Image(systemName: tab.symbol)
                         .font(.system(size: 14, weight: .medium))
                         .frame(maxWidth: .infinity, minHeight: 28)
-                        .foregroundStyle(selection == tab ? Color.accentColor : Color.secondary)
-                        .background(selection == tab ? Color.accentColor.opacity(0.18) : .clear, in: .rect(cornerRadius: 8))
+                        .foregroundStyle(current == tab ? Color.accentColor : Color.secondary)
+                        .background(current == tab ? Color.accentColor.opacity(0.18) : .clear, in: .rect(cornerRadius: 8))
                         .contentShape(.rect(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
@@ -79,6 +95,30 @@ private struct TabBar: View {
             }
         }
         .padding(4)
+        .background(Theme.surface, in: .rect(cornerRadius: 11))
+    }
+}
+
+/// Typing or voice across the panel's width, in neutral ink so it doesn't compete with the tabs below.
+private struct ModeBar: View {
+    @Binding var selection: Mode
+    let current: Mode
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(Mode.allCases, id: \.self) { mode in
+                Button { selection = mode } label: {
+                    Text(mode.title)
+                        .font(.callout.weight(current == mode ? .semibold : .regular))
+                        .foregroundStyle(current == mode ? Color.primary : Color.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 26)
+                        .background(current == mode ? Theme.controlPressed : .clear, in: .rect(cornerRadius: 8))
+                        .contentShape(.rect(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
         .background(Theme.surface, in: .rect(cornerRadius: 11))
     }
 }
@@ -366,7 +406,7 @@ private struct AppsTab: View {
         PanelHeader(title: "Apps") { PeriodPicker(period: $period) }
         Panel(spacing: 8) {
             if apps.isEmpty {
-                Text("No typing yet.").foregroundStyle(.secondary).font(.callout)
+                Text(data.mode == .voice ? "No dictation yet." : "No typing yet.").foregroundStyle(.secondary).font(.callout)
             }
             ForEach(Array(apps.enumerated()), id: \.element.appID) { index, app in
                 HStack(spacing: 8) {
@@ -406,6 +446,107 @@ private struct RecordsTab: View {
 
     private func row(_ label: String, _ value: String?, _ session: SessionRecord?, first: Bool = false) -> some View {
         record(label, value ?? "–", detail: session.map { "\(AppInfo.name($0.appID)) · \(Format.day($0.start))" }, divider: !first)
+    }
+
+    private func record(_ label: String, _ value: String, detail: String?, divider: Bool = true) -> some View {
+        VStack(spacing: 0) {
+            if divider { Divider().opacity(0.6) }
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(label).font(.callout)
+                    if let detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                }
+                Spacer()
+                Text(value).font(.callout.weight(.medium))
+            }
+            .padding(.vertical, 6)
+        }
+    }
+}
+
+private struct VoiceSpeedTab: View {
+    let tracker: LiveTracker
+    let data: PeriodData
+    @Binding var period: Period
+
+    var body: some View {
+        let _ = tracker.revision
+        let voice = data.voice
+        PanelHeader(title: "Speaking speed") { PeriodPicker(period: $period) }
+        Panel {
+            HStack(spacing: 6) {
+                Tile(title: "\(data.period.title) average", value: Format.wpm(voice.wpm), unit: "wpm", detail: change)
+                    .help("Words per minute of open microphone, thinking pauses included.")
+                last
+            }
+            if !data.sessions.isEmpty {
+                HStack {
+                    Text(data.period == .today ? "Speed by hour" : "Speed by day").font(.callout)
+                    Spacer()
+                    Text(summary).font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(.top, 2)
+                SpeedColumns(slots: SpeedColumns.slots(for: data), average: voice.wpm)
+                    .frame(height: 110)
+            }
+        }
+        Panel(spacing: 0) {
+            PanelRow(label: "Words spoken", value: voice.words.formatted(), divider: false)
+            if tracker.measure.typing {
+                PanelRow(label: "Words typed", value: (PeriodData(data.period, tracker: tracker).totals.netCharacters / 5).formatted())
+            }
+            PanelRow(label: "Talking time", value: Format.duration(voice.speakingSeconds))
+            PanelRow(label: "Dictations", value: voice.dictations.formatted())
+        }
+        .padding(.top, 8)
+    }
+
+    @ViewBuilder private var last: some View {
+        if let last = data.dictations.last(where: { $0.wpm != nil }) {
+            Tile(title: "Last dictation", value: Format.wpm(last.wpm), unit: "wpm",
+                 detail: Text("\(last.end.formatted(date: .omitted, time: .shortened)) · \(last.words) words"))
+        } else {
+            Tile(title: "Last dictation", value: "–", detail: Text("None yet"))
+        }
+    }
+
+    private var change: Text {
+        guard let now = data.voice.wpm, let before = data.previousVoice?.wpm else {
+            return Text(data.dictations.isEmpty ? "No dictation yet" : "Nothing to compare")
+        }
+        let change = now - before
+        if abs(change) < 0.5 { return Text("same as \(data.period.comparisonNoun)") }
+        return Text(Format.signed(change)).foregroundStyle(change > 0 ? .green : .red) + Text(" \(data.period.comparison)")
+    }
+
+    private var summary: String {
+        let best = SpeedColumns.slots(for: data).compactMap(\.wpm).max()
+        return "avg \(Format.wpm(data.voice.wpm))" + (best.map { " · best \(Format.wpm($0))" } ?? "")
+    }
+}
+
+private struct VoiceRecordsTab: View {
+    let tracker: LiveTracker
+
+    var body: some View {
+        let _ = tracker.revision
+        let records = VoiceRecords(tracker.allDictations(), calendar: .current)
+        PanelHeader(title: "Records") { Text("all time").font(.caption).foregroundStyle(.tertiary) }
+        Panel(spacing: 0) {
+            row("Fastest dictation", records.fastest.map { "\(Format.wpm($0.wpm)) wpm" }, records.fastest, first: true)
+            row("Most words", records.mostWords.map { "\($0.words.formatted()) words" }, records.mostWords)
+            row("Longest dictation", records.longest.flatMap(\.speakingSeconds).map(Format.duration), records.longest)
+            if let day = records.fastestDay {
+                record("Fastest day", "\(Format.wpm(day.totals.wpm)) wpm", detail: Format.day(day.day))
+            }
+            if let day = records.mostWordsDay {
+                record("Most words in a day", "\(day.totals.words.formatted())", detail: Format.day(day.day))
+            }
+        }
+    }
+
+    private func row(_ label: String, _ value: String?, _ dictation: DictationRecord?, first: Bool = false) -> some View {
+        record(label, value ?? "–", detail: dictation.map { "\(AppInfo.name($0.appID)) · \(Format.day($0.start))" }, divider: !first)
     }
 
     private func record(_ label: String, _ value: String, detail: String?, divider: Bool = true) -> some View {

@@ -1,17 +1,29 @@
 import SwiftUI
 import KeypaceCore
 
-/// A small always-on-top window with speed as you type.
+/// A small always-on-top window with speed as you type, or today's speaking speed when only voice is measured.
 struct LiveMetrics: View {
     let tracker: LiveTracker
 
     var body: some View {
         let _ = tracker.revision
+        Group {
+            if tracker.measure == .voice {
+                voice
+            } else {
+                typing
+            }
+        }
+        .monospacedDigit()
+        .padding(16)
+        .frame(width: 220, alignment: .leading)
+    }
+
+    private var typing: some View {
         let session = tracker.current
         let today = PeriodData(.today, tracker: tracker).totals
         let live = tracker.liveWPM
-
-        VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(Format.wpm(live ?? today.wpm)).font(.system(size: 44, weight: .semibold)).contentTransition(.numericText())
                 Text(live == nil ? "avg wpm" : "live wpm").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
@@ -28,9 +40,21 @@ struct LiveMetrics: View {
             .font(.callout)
             .foregroundStyle(.secondary)
         }
-        .monospacedDigit()
         .animation(.easeOut(duration: 0.2), value: live)
-        .padding(16)
-        .frame(width: 220, alignment: .leading)
+    }
+
+    private var voice: some View {
+        let today = PeriodData(.today, tracker: tracker, mode: .voice).voice
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(Format.wpm(today.wpm)).font(.system(size: 44, weight: .semibold)).contentTransition(.numericText())
+                Text("avg wpm").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+            }
+            .help("Today's speaking speed: words per minute of open microphone.")
+            Text("Today · \(Format.duration(today.speakingSeconds)) talking")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .animation(.easeOut(duration: 0.2), value: today.wpm)
     }
 }

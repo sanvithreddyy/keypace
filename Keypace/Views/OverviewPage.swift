@@ -4,15 +4,20 @@ import KeypaceCore
 
 struct OverviewPage: View {
     let tracker: LiveTracker
+    var mode = Mode.typing
     @AppStorage("overviewPeriod") private var period = Period.month
 
     var body: some View {
-        let data = { _ = tracker.revision; return PeriodData(period, tracker: tracker) }()
+        let data = { _ = tracker.revision; return PeriodData(period, tracker: tracker, mode: mode) }()
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 PageHeader(title: "Overview", period: $period).padding(.bottom, 16)
-                StatRow(tracker: tracker, data: data)
-                if !data.sessions.isEmpty {
+                if mode == .voice {
+                    VoiceOverview(tracker: tracker, data: data)
+                } else {
+                    StatRow(tracker: tracker, data: data)
+                }
+                if mode == .typing, !data.sessions.isEmpty {
                     SectionHeading(title: period == .today ? "Speed by hour" : "Speed by day",
                                    detail: data.previousSessions == nil ? nil : "This period in full ink, the previous one in gray")
                     SpeedChart(data: data)
@@ -108,7 +113,7 @@ private struct StatRow: View {
 }
 
 /// This period's speed in full ink with the previous period overlaid in gray, aligned by position.
-private struct SpeedChart: View {
+struct SpeedChart: View {
     let data: PeriodData
     @State private var hovered: Int?
 
@@ -186,7 +191,7 @@ private struct SpeedChart: View {
     private func hoverText(_ index: Int, current: [Point], previous: [Point]) -> String {
         var parts = [label(for: index)]
         let now = current.first { $0.index == index }?.wpm
-        parts.append(now.map { "\(Format.wpm($0)) wpm" } ?? "no typing")
+        parts.append(now.map { "\(Format.wpm($0)) wpm" } ?? data.mode.nothing)
         if let before = previous.first(where: { $0.index == index })?.wpm { parts.append("previous \(Format.wpm(before))") }
         return parts.joined(separator: " · ")
     }
@@ -217,8 +222,9 @@ private struct SpeedChart: View {
 }
 
 /// Weekday rows by hour columns. Shade is average wpm; empty cells are outlines; the fastest cell is solid with its value.
-private struct WeekHourHeatmap: View {
+struct WeekHourHeatmap: View {
     let sessions: [SessionRecord]
+    var mode = Mode.typing
 
     var body: some View {
         let calendar = Calendar.current
@@ -263,7 +269,7 @@ private struct WeekHourHeatmap: View {
 
     private func hoverText(_ key: Statistics.WeekdayHour, _ totals: TypingTotals?) -> String {
         let when = "\(Calendar.current.shortWeekdaySymbols[key.weekday - 1]) \(hourLabel(key.hour))"
-        guard let totals, let wpm = totals.wpm else { return "\(when) · no typing" }
+        guard let totals, let wpm = totals.wpm else { return "\(when) · \(mode.nothing)" }
         return "\(when) · \(Format.wpm(wpm)) wpm · \(Format.duration(totals.duration))"
     }
 

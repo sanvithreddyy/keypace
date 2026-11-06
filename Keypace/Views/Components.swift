@@ -112,12 +112,16 @@ struct BreakdownRow: Identifiable {
     let totals: TypingTotals
     /// Totals for the previous period, for the speed change.
     var previous: TypingTotals?
+    /// Words dictated, in voice mode.
+    var words: Int?
 }
 
-/// Typing time, share, speed, change and corrections per row, most typing first.
+/// Typing time, share, speed, change and corrections per row, most typing first. In voice mode
+/// the time is talking time and words dictated replace corrections.
 struct BreakdownTable<RowMenu: View>: View {
     let heading: String
     let rows: [BreakdownRow]
+    var mode = Mode.typing
     @ViewBuilder var menu: (BreakdownRow) -> RowMenu
 
     var body: some View {
@@ -125,12 +129,12 @@ struct BreakdownTable<RowMenu: View>: View {
         Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
             GridRow {
                 Text(heading)
-                Text("Typing time").gridColumnAlignment(.trailing)
+                Text(mode.timeLabel).gridColumnAlignment(.trailing)
                 Text("Share").gridColumnAlignment(.trailing)
-                Text("Net WPM").gridColumnAlignment(.trailing)
-                    .help("Speed after corrections; thinking pauses are excluded from new sessions.")
+                Text(mode == .voice ? "WPM" : "Net WPM").gridColumnAlignment(.trailing)
+                    .help(mode == .voice ? "Words per minute of open microphone." : "Speed after corrections; thinking pauses are excluded from new sessions.")
                 Text("Change").gridColumnAlignment(.trailing)
-                Text("Corrections").gridColumnAlignment(.trailing)
+                Text(mode == .voice ? "Words" : "Corrections").gridColumnAlignment(.trailing)
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -147,7 +151,7 @@ struct BreakdownTable<RowMenu: View>: View {
                     Text(Format.percent(row.totals.duration / total)).foregroundStyle(.secondary)
                     Text(Format.wpm(row.totals.wpm))
                     change(row.totals.wpm, row.previous?.wpm)
-                    Text(Format.percent(row.totals.correctionRate)).foregroundStyle(.secondary)
+                    Text(mode == .voice ? (row.words ?? 0).formatted() : Format.percent(row.totals.correctionRate)).foregroundStyle(.secondary)
                 }
                 .contextMenu { menu(row) }
             }
