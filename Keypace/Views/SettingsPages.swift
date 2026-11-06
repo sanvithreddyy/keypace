@@ -13,6 +13,7 @@ struct GeneralSettingsPage: View {
     @AppStorage("menuBarSpeeds") private var menuBarSpeeds = MenuBarSpeeds.both
     @AppStorage(Appearance.key) private var appearance = Appearance.light
     @State private var confirmingVoiceReset = false
+    @Bindable private var updates = Updates.shared
 
     var body: some View {
         SettingsPage(title: "General") {
@@ -97,7 +98,22 @@ struct GeneralSettingsPage: View {
                     Button("Delete…", role: .destructive) { confirmingReset = true }
                 }
             }
+            SettingsSection("Updates") {
+                SettingsRow("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") { EmptyView() }
+                SettingsRow("Check for updates automatically", description: "Once a day.") {
+                    Toggle("Check for updates automatically", isOn: $updates.checksAutomatically).toggleStyle(.switch).labelsHidden()
+                }
+                SettingsRow("Check now", description: updateStatus) {
+                    if updates.release != nil {
+                        Button("Show Update") { updates.checkNow() }
+                    } else {
+                        Button("Check for Updates") { updates.checkNow() }
+                            .disabled(!updates.canCheck || updates.check == .checking)
+                    }
+                }
+            }
         }
+        .onAppear { updates.refreshLastChecked() }
         .confirmationDialog("Delete all history?", isPresented: $confirmingReset) {
             Button("Delete All History", role: .destructive) { tracker.deleteAllHistory() }
         } message: {
@@ -107,6 +123,18 @@ struct GeneralSettingsPage: View {
             Button("Delete Voice History", role: .destructive) { tracker.deleteVoiceHistory() }
         } message: {
             Text("This can't be undone.")
+        }
+    }
+
+    private var updateStatus: String? {
+        if let release = updates.release { return "Keypace \(release.version) is available." }
+        switch updates.check {
+        case .checking: return "Checking…"
+        case .upToDate: return "Keypace is up to date."
+        case .failed: return "Couldn't check. Try again in a moment."
+        case .idle:
+            guard let date = updates.lastChecked else { return nil }
+            return "Last checked \(date.formatted(.relative(presentation: .named)))."
         }
     }
 
@@ -216,6 +244,80 @@ struct TrackingSettingsPage: View {
     }
 }
 
+/// The newer version, Update Now, and what changed, as System Settings shows a macOS update.
+struct UpdatePage: View {
+    private let updates = Updates.shared
+
+    var body: some View {
+        SettingsPage(title: "Software Update") {
+            if let release = updates.release {
+                SettingsSection("") {
+                    HStack(spacing: 12) {
+                        Image(nsImage: NSApp.applicationIconImage)
+                            .resizable()
+                            .frame(width: 44, height: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Keypace \(release.version)").font(.headline)
+                            Text(status(of: release))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Spacer(minLength: 12)
+                        action
+                            .frame(minWidth: 120, alignment: .trailing)
+                    }
+                    .padding(.vertical, 12)
+                    if !release.notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(release.notes, id: \.self) { note in
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text("•").foregroundStyle(.secondary)
+                                    Text(note).fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .font(.callout)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 12)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var action: some View {
+        switch updates.phase {
+        case .ready:
+            Button("Update Now") { updates.install() }
+                .buttonStyle(.borderedProminent)
+        case .downloading(let received, let total):
+            ProgressView(value: Double(received), total: Double(max(total, received, 1)))
+                .frame(width: 120)
+        case .installing:
+            ProgressView()
+                .progressViewStyle(.linear)
+                .frame(width: 120)
+        case .failed:
+            Button("Try Again") { updates.install() }
+        }
+    }
+
+    private func status(of release: Updates.Release) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        // "0 KB", not "Zero KB", as the download starts.
+        formatter.allowsNonnumericFormatting = false
+        let size = { (bytes: Int64) in formatter.string(fromByteCount: bytes) }
+        return switch updates.phase {
+        case .ready: size(release.size)
+        case .downloading(let received, let total): "Downloading… \(size(received)) of \(size(max(total, received)))"
+        case .installing: "Installing… Keypace will reopen."
+        case .failed: "The update didn't finish."
+        }
+    }
+}
+
 // MARK: Building blocks
 
 /// A scrolling settings page with a title.
@@ -249,7 +351,7 @@ private struct SettingsSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
+            if !title.isEmpty { Text(title).font(.headline) }
             VStack(spacing: 0) {
                 Group(subviews: content) { rows in
                     ForEach(Array(rows.enumerated()), id: \.offset) { index, row in

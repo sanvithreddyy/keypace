@@ -55,9 +55,15 @@ Or in one command:
 brew install sanvithreddyy/keypace/keypace
 ```
 
-Homebrew installs the same release, opens it without the Open Anyway step, and
-`brew upgrade` keeps it current. Allow Keypace under **Input Monitoring** when
-asked.
+Homebrew installs the same release and opens it without the Open Anyway step.
+Allow Keypace under **Input Monitoring** when asked.
+
+### Updates
+
+Keypace checks for a new version once a day and shows it in its window: an
+**Update Available** row at the top of the sidebar, with what changed and
+**Update Now**. Nothing installs until you press it. **General → Updates** has
+**Check for Updates** to look right away, and a switch for the daily check.
 
 ### From the download
 
@@ -189,6 +195,18 @@ Set `DEVELOPMENT_TEAM` in `Config/Signing.local.xcconfig` (or `KEYPACE_TEAM_ID`)
 `KEYPACE_SIGN_IDENTITY` defaults to `Developer ID Application` and
 `KEYPACE_NOTARY_PROFILE` to `keypace`.
 
+Every release also uploads `appcast.xml`, the feed the app checks. Write it
+after the DMG, with one `- ` line per change in a notes file:
+
+```sh
+scripts/appcast.sh notes.txt > build/release/appcast.xml
+```
+
+It signs the DMG with the update key in the login keychain (Sparkle's
+`generate_keys --account keypace`); the public half is `SPARKLE_PUBLIC_KEY` in
+`project.yml`. Upload the DMG and `appcast.xml` to the same release. A release
+without `appcast.xml` breaks updates, since the app reads the latest release's.
+
 ### Layout
 
 ```
@@ -197,6 +215,7 @@ Keypace/                 App target
   Tracking/              Session lifecycle, filtering, storage and settings
   Views/                 Menu-bar dropdown, main window pages, Live Metrics
   Support/               Formatting, labels and shared view data
+  Updates/               In-app updates through Sparkle, with Keypace's own UI
 KeypaceTests/            Pipeline and screen tests with sample history
 Packages/KeypaceCore/    Session engine, storage, statistics, records, tests
 Config/                  Signing configuration

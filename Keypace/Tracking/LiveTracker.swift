@@ -151,7 +151,13 @@ final class LiveTracker {
     /// The tracker for the running app, saving to Application Support.
     static func live() -> LiveTracker {
         do {
-            let folder = URL.applicationSupportDirectory.appending(path: "Keypace", directoryHint: .isDirectory)
+            var folder = URL.applicationSupportDirectory.appending(path: "Keypace", directoryHint: .isDirectory)
+            #if DEBUG
+            // -data-folder <path>: a test copy keeps its own history, away from the real one.
+            if let i = CommandLine.arguments.firstIndex(of: "-data-folder"), i + 1 < CommandLine.arguments.count {
+                folder = URL(filePath: CommandLine.arguments[i + 1], directoryHint: .isDirectory)
+            }
+            #endif
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             return LiveTracker(store: try SessionStore(path: folder.appending(path: "typing.sqlite").path))
         } catch {

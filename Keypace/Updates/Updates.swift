@@ -1,0 +1,369 @@
+import AppKit
+import Sparkle
+
+/// Newer versions of Keypace. Sparkle finds them, downloads them, checks their signature and installs them;
+/// the window shows what it found and Update Now, through the driver below in place of Sparkle's windows.
+@Observable
+final class Updates {
+    static let shared = Updates()
+
+    struct Release: Equatable {
+        var version: String
+        var size: Int64
+        var notes: [String]
+    }
+
+    enum Phase: Equatable {
+        case ready
+        case downloading(received: Int64, total: Int64)
+        case installing
+        case failed
+    }
+
+    /// A check asked for with Check Now, and how it went.
+    enum Check: Equatable {
+        case idle
+        case checking
+        case upToDate
+        case failed
+    }
+
+    /// The newer version, while there is one.
+    private(set) var release: Release?
+    private(set) var phase = Phase.ready
+    private(set) var check = Check.idle
+    private(set) var lastChecked: Date?
+    /// Test copies without a feed have no updater, so nothing to check.
+    var canCheck: Bool { updater != nil || previewing }
+    /// A page the window should show: the update's, or General after an update. The window goes there and clears it.
+    var requestedPage: MainWindow.Page?
+    /// Opens the main window; the menu bar sets it, since only views can open windows.
+    @ObservationIgnored var openWindow: (() -> Void)?
+
+    /// The daily check, on unless turned off in General. Sparkle keeps the choice.
+    var checksAutomatically = true {
+        didSet {
+            guard let updater, updater.automaticallyChecksForUpdates != checksAutomatically else { return }
+            updater.automaticallyChecksForUpdates = checksAutomatically
+        }
+    }
+
+    @ObservationIgnored private var updater: SPUUpdater?
+    @ObservationIgnored private let driver = UpdateDriver()
+    @ObservationIgnored private let delegate = UpdaterDelegate()
+    /// Sparkle's question, "install this one?", answered when Update Now is pressed.
+    @ObservationIgnored private var answer: ((SPUUserUpdateChoice) -> Void)?
+    /// Update Now after a failure checks again, and what that finds installs straight away.
+    @ObservationIgnored private var installWhenFound = false
+    /// Snapshots show the page as a real copy would, with nothing to check.
+    @ObservationIgnored private var previewing = false
+
+    private static let reopenKey = "openWindowAfterUpdate"
+
+    func start() {
+        #if DEBUG
+        // Test copies check only a feed they're given, never the real one.
+        guard UpdateDebug.feed != nil || UpdateDebug.previewPhase != nil else { return }
+        if let phase = UpdateDebug.previewPhase {
+            release = UpdateDebug.sample
+            self.phase = phase
+            return
+        }
+        #endif
+        let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: delegate)
+        do {
+            try updater.start()
+        } catch {
+            return
+        }
+        self.updater = updater
+        checksAutomatically = updater.automaticallyChecksForUpdates
+        lastChecked = updater.lastUpdateCheckDate
+        #if DEBUG
+        if let delay = UpdateDebug.checkAfter {
+            Task { @MainActor in
+                // General open first, where the button is.
+                try? await Task.sleep(for: .seconds(1))
+                self.requestedPage = .general
+                self.openWindow?()
+                try? await Task.sleep(for: .seconds(delay))
+                self.checkNow()
+                // The result, for scripts: the Updates section sits below the window's first screen.
+                while self.check == .checking { try? await Task.sleep(for: .milliseconds(100)) }
+                print("CHECK \(self.check) release=\(self.release?.version ?? "none")")
+                fflush(stdout)
+            }
+        }
+        #endif
+    }
+
+    /// Check Now: looks for a newer version straight away. One already found opens its page.
+    func checkNow() {
+        guard let updater, check != .checking else { return }
+        if release != nil {
+            requestedPage = .update
+            return
+        }
+        guard updater.canCheckForUpdates else { return }
+        check = .checking
+        updater.checkForUpdates()
+    }
+
+    /// The daily check runs on its own, so General reads its time when it shows.
+    func refreshLastChecked() {
+        if let date = updater?.lastUpdateCheckDate { lastChecked = date }
+    }
+
+    func install() {
+        if let answer {
+            self.answer = nil
+            phase = .downloading(received: 0, total: release?.size ?? 0)
+            answer(.install)
+        } else if phase == .failed, let updater, updater.canCheckForUpdates {
+            installWhenFound = true
+            phase = .downloading(received: 0, total: release?.size ?? 0)
+            updater.checkForUpdates()
+        }
+    }
+
+    /// Keypace reopens its window after an update, on General, showing the new version.
+    func takeReopenRequest() -> Bool {
+        guard UserDefaults.standard.bool(forKey: Self.reopenKey) else { return false }
+        UserDefaults.standard.removeObject(forKey: Self.reopenKey)
+        requestedPage = .general
+        return true
+    }
+
+    /// The release notes' bullet lines, without their markers.
+    nonisolated static func notes(from description: String?) -> [String] {
+        let lines = (description ?? "").split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let bullets = lines.compactMap { line -> String? in
+            for marker in ["- ", "* ", "• "] where line.hasPrefix(marker) {
+                return String(line.dropFirst(marker.count))
+            }
+            return nil
+        }
+        return bullets.isEmpty ? lines : bullets
+    }
+
+    // What Sparkle reports, through the driver and delegate.
+
+    fileprivate func found(_ item: SUAppcastItem, reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        guard !item.isInformationOnlyUpdate else {
+            reply(.dismiss)
+            return
+        }
+        release = Release(version: item.displayVersionString, size: Int64(item.contentLength),
+                          notes: Self.notes(from: item.itemDescription))
+        refreshLastChecked()
+        if check == .checking {
+            check = .idle
+            showPage()
+        }
+        if installWhenFound {
+            installWhenFound = false
+            reply(.install)
+            return
+        }
+        phase = .ready
+        answer = reply
+        #if DEBUG
+        if let delay = UpdateDebug.pressAfter {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(delay))
+                self.install()
+            }
+        }
+        #endif
+    }
+
+    fileprivate func downloadStarted() {
+        phase = .downloading(received: 0, total: release?.size ?? 0)
+    }
+
+    fileprivate func downloadExpects(_ total: UInt64) {
+        if case .downloading(let received, _) = phase { phase = .downloading(received: received, total: Int64(total)) }
+    }
+
+    fileprivate func downloadReceived(_ length: UInt64) {
+        if case .downloading(let received, let total) = phase {
+            phase = .downloading(received: received + Int64(length), total: total)
+        }
+    }
+
+    fileprivate func installing() {
+        phase = .installing
+    }
+
+    /// A failed check in the background, with nothing found yet, isn't worth a word.
+    fileprivate func failed() {
+        installWhenFound = false
+        if check == .checking { check = .failed }
+        if release != nil { phase = .failed }
+    }
+
+    fileprivate func notFound() {
+        installWhenFound = false
+        if check == .checking { check = .upToDate }
+        refreshLastChecked()
+        release = nil
+        phase = .ready
+    }
+
+    fileprivate func ended() {
+        answer = nil
+        guard phase != .failed else { return }
+        release = nil
+        phase = .ready
+    }
+
+    fileprivate func showPage() {
+        requestedPage = .update
+        openWindow?()
+    }
+
+    fileprivate func willRelaunch() {
+        UserDefaults.standard.set(true, forKey: Self.reopenKey)
+    }
+}
+
+/// Sparkle's questions and progress, turned into Updates' state instead of Sparkle's own windows.
+private final class UpdateDriver: NSObject, SPUUserDriver {
+    private var updates: Updates { .shared }
+
+    func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) {
+        reply(SUUpdatePermissionResponse(automaticUpdateChecks: true, sendSystemProfile: false))
+    }
+
+    func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {}
+
+    func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState,
+                         reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        updates.found(appcastItem, reply: reply)
+    }
+
+    func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {}
+
+    func showUpdateReleaseNotesFailedToDownloadWithError(_ error: any Error) {}
+
+    func showUpdateNotFoundWithError(_ error: any Error, acknowledgement: @escaping () -> Void) {
+        updates.notFound()
+        acknowledgement()
+    }
+
+    func showUpdaterError(_ error: any Error, acknowledgement: @escaping () -> Void) {
+        updates.failed()
+        acknowledgement()
+    }
+
+    func showDownloadInitiated(cancellation: @escaping () -> Void) {
+        updates.downloadStarted()
+    }
+
+    func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) {
+        updates.downloadExpects(expectedContentLength)
+    }
+
+    func showDownloadDidReceiveData(ofLength length: UInt64) {
+        updates.downloadReceived(length)
+    }
+
+    func showDownloadDidStartExtractingUpdate() {
+        updates.installing()
+    }
+
+    func showExtractionReceivedProgress(_ progress: Double) {}
+
+    /// Update Now already said yes.
+    func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        reply(.install)
+    }
+
+    func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool,
+                              retryTerminatingApplication: @escaping () -> Void) {
+        updates.installing()
+    }
+
+    func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) {
+        acknowledgement()
+    }
+
+    func showUpdateInFocus() {
+        updates.showPage()
+    }
+
+    func dismissUpdateInstallation() {
+        updates.ended()
+    }
+}
+
+private final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
+    func feedURLString(for updater: SPUUpdater) -> String? {
+        #if DEBUG
+        return UpdateDebug.feed
+        #else
+        return nil
+        #endif
+    }
+
+    /// The notes come inside the feed.
+    func updater(_ updater: SPUUpdater, shouldDownloadReleaseNotesForUpdate updateItem: SUAppcastItem) -> Bool {
+        false
+    }
+
+    func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
+        Updates.shared.willRelaunch()
+    }
+
+    #if DEBUG
+    func updaterShouldRelaunchApplication(_ updater: SPUUpdater) -> Bool {
+        !CommandLine.arguments.contains("-update-no-relaunch")
+    }
+    #endif
+}
+
+#if DEBUG
+/// -update-feed <url>: check this feed (test copies check nothing otherwise); -update-check-after <seconds>:
+/// open General and press Check Now that long after launch; -update-press-after <seconds>: press Update Now
+/// that long after an update is found; -update-no-relaunch: leave the installed copy closed;
+/// -preview-update ready|downloading|installing|failed: a made-up update, nothing checked.
+enum UpdateDebug {
+    static var feed: String? { value(after: "-update-feed") }
+    static var checkAfter: Double? { value(after: "-update-check-after").flatMap(Double.init) }
+    static var pressAfter: Double? { value(after: "-update-press-after").flatMap(Double.init) }
+
+    static var previewPhase: Updates.Phase? {
+        switch value(after: "-preview-update") {
+        case "ready": .ready
+        case "downloading": .downloading(received: 1_180_000, total: 3_530_000)
+        case "installing": .installing
+        case "failed": .failed
+        default: nil
+        }
+    }
+
+    static let sample = Updates.Release(version: "0.4", size: 3_530_000, notes: [
+        "Speaking speed for any dictation app.",
+        "Updates arrive inside Keypace.",
+    ])
+
+    static func value(after flag: String) -> String? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+}
+
+extension Updates {
+    /// A made-up update for snapshots, nothing checked.
+    func preview(_ release: Release?, phase: Phase = .ready, check: Check = .idle, lastChecked: Date? = nil) {
+        self.release = release
+        self.phase = phase
+        self.check = check
+        self.lastChecked = lastChecked
+        previewing = true
+    }
+}
+#endif

@@ -177,6 +177,32 @@ struct SnapshotTests {
         try render(GeneralSettingsPage(tracker: tracker), size: CGSize(width: 780, height: 1500), name: "voice-settings", scheme: .light)
     }
 
+    @Test(arguments: [Updates.Check.idle, .checking, .upToDate, .failed])
+    func `update settings`(check: Updates.Check) throws {
+        Updates.shared.preview(nil, check: check, lastChecked: .now.addingTimeInterval(-2 * 3600))
+        defer { Updates.shared.preview(nil) }
+        try render(GeneralSettingsPage(tracker: tracker), size: CGSize(width: 780, height: 1700), name: "updates-settings-\(check)", scheme: .light)
+    }
+
+    @Test func `update found in settings`() throws {
+        Updates.shared.preview(UpdateDebug.sample)
+        defer { Updates.shared.preview(nil) }
+        try render(GeneralSettingsPage(tracker: tracker), size: CGSize(width: 780, height: 1700), name: "updates-settings-found", scheme: .light)
+    }
+
+    @Test(arguments: [Updates.Phase.ready, .downloading(received: 1_180_000, total: 3_530_000), .installing, .failed])
+    func `update page`(phase: Updates.Phase) throws {
+        Updates.shared.preview(UpdateDebug.sample, phase: phase)
+        defer { Updates.shared.preview(nil) }
+        let name = switch phase {
+        case .ready: "ready"
+        case .downloading: "downloading"
+        case .installing: "installing"
+        case .failed: "failed"
+        }
+        try render(UpdatePage(), size: CGSize(width: 780, height: 360), name: "update-page-\(name)", scheme: .light)
+    }
+
     private func renderMetrics(name: String) throws {
         let metrics = LiveMetrics(tracker: tracker)
         let needed = NSHostingController(rootView: metrics).sizeThatFits(in: CGSize(width: 220, height: 2000))

@@ -9,6 +9,7 @@ struct KeypaceApp: App {
     init() {
         // Before any window opens, so the chosen look shows from the first frame.
         Appearance.saved.apply()
+        Updates.shared.start()
     }
 
     var body: some Scene {
@@ -48,8 +49,18 @@ private struct MenuBarLabel: View {
     @AppStorage("menuBarFormat") private var format = MenuBarFormat.withUnit
     @AppStorage("menuBarNumber") private var number = MenuBarNumber.liveThenToday
     @AppStorage("menuBarSpeeds") private var speeds = MenuBarSpeeds.both
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        content
+            // The label is the one view alive from launch, so it opens the window for updates.
+            .onAppear {
+                Updates.shared.openWindow = { openWindow(id: "main") }
+                if Updates.shared.takeReopenRequest() { openWindow(id: "main") }
+            }
+    }
+
+    @ViewBuilder private var content: some View {
         let shown = speeds.shown(for: tracker.measure)
         let typing = shown == .voice ? nil : typingWPM
         let voice = shown == .typing ? nil : voiceWPM

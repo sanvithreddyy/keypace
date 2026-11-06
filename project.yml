@@ -7,6 +7,10 @@ options:
 packages:
   KeypaceCore:
     path: Packages/KeypaceCore
+  # Updates: finds, downloads, checks and installs new versions; Keypace draws its own UI for it.
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -16,12 +20,17 @@ targets:
   Keypace:
     type: application
     platform: macOS
-    sources: [Keypace]
+    sources:
+      - path: Keypace
+      # Sparkle's license travels with the app, as its MIT terms ask of copies.
+      - path: Vendor/Sparkle/Sparkle-LICENSE
+        buildPhase: resources
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig
     dependencies:
       - package: KeypaceCore
+      - package: Sparkle
     scheme:
       testTargets: [KeypaceTests]
     info:
@@ -32,9 +41,15 @@ targets:
         CFBundleVersion: "2"
         LSUIElement: true
         LSMinimumSystemVersion: "15.0"
+        SUFeedURL: https://github.com/sanvithreddyy/keypace/releases/latest/download/appcast.xml
+        # Updates install only when signed with the private half, kept in the release machine's keychain.
+        SUPublicEDKey: $(SPARKLE_PUBLIC_KEY)
+        # Checks once a day without asking first; Settings shows what it finds.
+        SUEnableAutomaticChecks: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sanvith.keypace
+        SPARKLE_PUBLIC_KEY: rHPd7TIOxWTEWvxZ4VhamQVMuyJHO0yDSuq3j4nZVA4=
         MARKETING_VERSION: "0.2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
@@ -53,6 +68,7 @@ targets:
       Release: Config/Signing.xcconfig
     dependencies:
       - package: KeypaceCore
+      - package: Sparkle
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
