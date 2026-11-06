@@ -4,20 +4,15 @@ import KeypaceCore
 
 struct OverviewPage: View {
     let tracker: LiveTracker
-    var mode = Mode.typing
     @AppStorage("overviewPeriod") private var period = Period.month
 
     var body: some View {
-        let data = { _ = tracker.revision; return PeriodData(period, tracker: tracker, mode: mode) }()
+        let data = { _ = tracker.revision; return PeriodData(period, tracker: tracker) }()
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 PageHeader(title: "Overview", period: $period).padding(.bottom, 16)
-                if mode == .voice {
-                    VoiceOverview(tracker: tracker, data: data)
-                } else {
-                    StatRow(tracker: tracker, data: data)
-                }
-                if mode == .typing, !data.sessions.isEmpty {
+                StatRow(tracker: tracker, data: data)
+                if !data.sessions.isEmpty {
                     SectionHeading(title: period == .today ? "Speed by hour" : "Speed by day",
                                    detail: data.previousSessions == nil ? nil : "This period in full ink, the previous one in gray")
                     SpeedChart(data: data)

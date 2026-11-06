@@ -155,12 +155,9 @@ struct SnapshotTests {
         }
     }
 
-    @Test(arguments: [MainWindow.Page.overview, .statistics, .apps, .records])
-    func `voice page`(page: MainWindow.Page) throws {
+    @Test func `voice page`() throws {
         fillVoice()
-        UserDefaults.standard.set(Period.month.rawValue, forKey: "overviewPeriod")
-        defer { UserDefaults.standard.removeObject(forKey: "overviewPeriod") }
-        try render(MainWindow.detail(for: page, tracker: tracker, mode: .voice), size: CGSize(width: 780, height: 1000), name: "voice-page-\(page)", scheme: .light)
+        try render(MainWindow.detail(for: .voice, tracker: tracker), size: CGSize(width: 780, height: 1300), name: "voice-page", scheme: .light)
     }
 
     @Test(arguments: [Dropdown.Tab.speed, .apps, .records])
@@ -237,7 +234,7 @@ struct SnapshotTests {
         // Glass skips its descendants during a frame capture. Capture the actual List below that
         // compositing boundary, preserving native cells, section header, spacing and selection.
         let list = try #require(views.compactMap { $0 as? NSOutlineView }.first)
-        #expect(list.numberOfRows == 10)
+        #expect(list.numberOfRows == 11)
         #expect(list.selectedRow == (page == .overview ? 0 : 3))
         let selectedRow = try #require(list.rowView(atRow: list.selectedRow, makeIfNecessary: false))
         for effect in descendants(selectedRow).compactMap({ $0 as? NSVisualEffectView }) { effect.isHidden = true }

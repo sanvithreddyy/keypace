@@ -1,9 +1,24 @@
 import SwiftUI
 import KeypaceCore
 
-/// The Overview page's content in voice mode: speaking speed against typing, then where the words,
-/// the pace and the time go.
-struct VoiceOverview: View {
+/// Dictation in one page: speaking speed against typing, then where the words, the pace and the time go.
+struct VoicePage: View {
+    let tracker: LiveTracker
+    @AppStorage("voicePeriod") private var period = Period.week
+
+    var body: some View {
+        let data = { _ = tracker.revision; return PeriodData(period, tracker: tracker, mode: .voice) }()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                PageHeader(title: "Voice", period: $period).padding(.bottom, 16)
+                VoiceOverview(tracker: tracker, data: data)
+            }
+            .padding(24)
+        }
+    }
+}
+
+private struct VoiceOverview: View {
     let tracker: LiveTracker
     let data: PeriodData
 
@@ -475,80 +490,5 @@ private struct SourceBars: View {
         }
         .font(.callout)
         .monospacedDigit()
-    }
-}
-
-
-/// The Records page's content in voice mode.
-struct VoiceRecordsContent: View {
-    let tracker: LiveTracker
-
-    var body: some View {
-        let dictations = tracker.allDictations()
-        let records = VoiceRecords(dictations, calendar: .current)
-        let streaks = Statistics.streaks(starts: dictations.map(\.start), today: .now, calendar: .current)
-        if dictations.isEmpty {
-            Text("No dictation recorded yet.").foregroundStyle(.secondary)
-        } else {
-            VStack(spacing: 0) {
-                Divider()
-                HStack(alignment: .top, spacing: 0) {
-                    block("Fastest dictation", records.fastest.map { "\(Format.wpm($0.wpm)) wpm" }, records.fastest)
-                    Divider()
-                    block("Most words", records.mostWords.map { "\($0.words.formatted()) words" }, records.mostWords)
-                    Divider()
-                    block("Longest dictation", records.longest.flatMap(\.speakingSeconds).map(Format.duration), records.longest)
-                    Divider()
-                    StatBlock(label: "Streak", value: "\(streaks.current) \(streaks.current == 1 ? "day" : "days")", change: "best \(streaks.longest)")
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                Divider()
-            }
-
-            SectionHeading(title: "Best days")
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-                if let day = records.fastestDay {
-                    dayRow("Fastest day", day: day.day, value: "\(Format.wpm(day.totals.wpm)) wpm", detail: Format.duration(day.totals.speakingSeconds))
-                }
-                if let day = records.mostWordsDay {
-                    dayRow("Most words", day: day.day, value: "\(day.totals.words.formatted()) words", detail: "\(day.totals.dictations) dictations")
-                }
-            }
-            .font(.callout)
-            .monospacedDigit()
-
-            if !records.fastestByApp.isEmpty {
-                SectionHeading(title: "Fastest by app")
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-                    ForEach(records.fastestByApp, id: \.appID) { dictation in
-                        GridRow {
-                            Text(AppInfo.name(dictation.appID)).frame(maxWidth: .infinity, alignment: .leading)
-                            Text("\(Format.wpm(dictation.wpm)) wpm").gridColumnAlignment(.trailing)
-                            Text(Format.day(dictation.start)).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-                        }
-                    }
-                }
-                .font(.callout)
-                .monospacedDigit()
-            }
-
-            Text("Speed records count dictations of at least \(Int(VoiceRecords.minimumSeconds)) seconds and \(VoiceRecords.minimumWords) words; a fastest day needs \(Int(VoiceRecords.minimumDaySeconds / 60)) minutes of talking.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, 24)
-        }
-    }
-
-    private func block(_ label: String, _ value: String?, _ dictation: DictationRecord?) -> some View {
-        StatBlock(label: label, value: value ?? "–", change: dictation.map { "\(AppInfo.name($0.appID)) · \(Format.day($0.start))" })
-    }
-
-    private func dayRow(_ label: String, day: Date, value: String, detail: String) -> some View {
-        GridRow {
-            Text(label).foregroundStyle(.secondary)
-            Text(day.formatted(date: .complete, time: .omitted)).frame(maxWidth: .infinity, alignment: .leading)
-            Text(value).gridColumnAlignment(.trailing)
-            Text(detail).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-        }
     }
 }

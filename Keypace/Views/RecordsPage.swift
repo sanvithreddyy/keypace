@@ -4,24 +4,8 @@ import KeypaceCore
 /// Personal bests across all history.
 struct RecordsPage: View {
     let tracker: LiveTracker
-    var mode = Mode.typing
 
     var body: some View {
-        if mode == .voice {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Records").font(.title2.weight(.semibold)).padding(.bottom, 16)
-                    let _ = tracker.revision
-                    VoiceRecordsContent(tracker: tracker)
-                }
-                .padding(24)
-            }
-        } else {
-            typing
-        }
-    }
-
-    @ViewBuilder private var typing: some View {
         let _ = tracker.revision
         let sessions = tracker.allSessions()
         let records = Records(sessions, calendar: .current)
