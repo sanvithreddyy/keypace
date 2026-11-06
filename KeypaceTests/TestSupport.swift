@@ -5,6 +5,9 @@ import KeypaceCore
 final class TestClock {
     var date: Date
     var uptime: Double
+    var clipboard: String?
+    /// Apps by process ID; unknown processes belong to "pid:<id>".
+    var owners: [Int32: String] = [:]
 
     init(date: Date, uptime: Double = 1000) {
         self.date = date
@@ -12,7 +15,10 @@ final class TestClock {
     }
 
     var clock: LiveTracker.Clock {
-        LiveTracker.Clock(now: { [unowned self] in date }, uptime: { [unowned self] in uptime })
+        LiveTracker.Clock(
+            now: { [unowned self] in date }, uptime: { [unowned self] in uptime },
+            clipboard: { [unowned self] in clipboard }, appOwner: { [unowned self] in owners[$0] ?? "pid:\($0)" }
+        )
     }
 
     func advance(_ seconds: Double) {

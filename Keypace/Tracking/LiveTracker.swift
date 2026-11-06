@@ -13,6 +13,10 @@ final class LiveTracker {
         var now: () -> Date = { .now }
         /// Seconds since boot; key events use the same clock.
         var uptime: () -> Double = { ProcessInfo.processInfo.systemUptime }
+        /// The clipboard's text, read only when a dictation app pastes.
+        var clipboard: () -> String? = { NSPasteboard.general.string(forType: .string) }
+        /// The app a process belongs to.
+        var appOwner: (Int32) -> String = { AppOwner.bundleID(of: $0) }
     }
 
     private(set) var status = Status.needsPermission
@@ -51,6 +55,20 @@ final class LiveTracker {
         }
     }
 
+    /// Typing, voice or both.
+    var measure: Measure {
+        didSet {
+            defaults.set(measure.rawValue, forKey: Keys.measure)
+            if !measure.typing {
+                endSession()
+                engine.resetLive()
+                liveWPM = nil
+            }
+            if !measure.voice { dictations = DictationDetector() }
+            updateMicrophones()
+        }
+    }
+
     let store: SessionStore?
     let inputSources: InputSources?
     let captureHealth: CaptureHealth
@@ -78,6 +96,11 @@ final class LiveTracker {
     private var seenKeyboards: [String: KeyboardRecord] = [:]
     private var seenInputSources: [String: InputSourceRecord] = [:]
     private let monitor: KeyboardMonitor
+    private let microphones = MicrophoneMonitor()
+    private var dictations = DictationDetector()
+    /// Where typed-out dictation is going, per dictation app.
+    private var dictationTargets: [String: String] = [:]
+    private let capture: Bool
     private let defaults: UserDefaults
     private let clock: Clock
     private var timer: Timer?
@@ -88,13 +111,19 @@ final class LiveTracker {
         static let minimumCharacters = "minimumCharacters"
         static let filter = "appFilter"
         static let syntheticStrength = "syntheticStrength"
+        static let measure = "measure"
     }
+
+    /// ANSI V, posted with Command by apps that paste.
+    private static let pasteKeyCode: UInt16 = 9
 
     /// - Parameter capture: false for tests and previews: no keyboard tap, no device or layout watching.
     init(store: SessionStore?, defaults: UserDefaults = .standard, clock: Clock = Clock(), capture: Bool = true) {
         self.store = store
         self.defaults = defaults
         self.clock = clock
+        self.capture = capture
+        measure = defaults.string(forKey: Keys.measure).flatMap(Measure.init) ?? .both
         let health = CaptureHealth(defaults: defaults, now: clock.now)
         captureHealth = health
         monitor = KeyboardMonitor(health: health)
@@ -173,6 +202,28 @@ final class LiveTracker {
         return attempt { try store.syntheticCount(in: interval, appID: appID) } ?? 0
     }
 
+    func dictations(in interval: DateInterval) -> [DictationRecord] {
+        guard let store else { return [] }
+        return attempt { try store.dictations(in: interval) } ?? []
+    }
+
+    func allDictations() -> [DictationRecord] {
+        guard let store else { return [] }
+        return attempt { try store.allDictations() } ?? []
+    }
+
+    func firstDictationStart() -> Date? {
+        guard let store else { return nil }
+        return attempt { try store.firstDictationStart() } ?? nil
+    }
+
+    func deleteVoiceHistory() {
+        dictations = DictationDetector()
+        dictationTargets = [:]
+        attempt { try store?.deleteAllDictations() }
+        revision += 1
+    }
+
     func keyboards() -> [KeyboardRecord] {
         guard let store else { return [] }
         return attempt { try store.keyboards() } ?? []
@@ -226,7 +277,12 @@ final class LiveTracker {
     // MARK: Pipeline
 
     /// Runs one key-down through the app filter, the synthetic filter and the session engine.
+    /// Keys posted by software also go to dictation detection.
     func handle(_ key: ObservedKey, appID: String, keyboard: KeyboardRecord?, inputSource: InputSourceRecord?) {
+        if measure.voice, !SyntheticFilter.isHardware(sourceStateID: key.sourceStateID, sourceProcessID: key.sourceProcessID) {
+            noteDictationText(key, appID: appID)
+        }
+        guard measure.typing else { return }
         guard filter.tracks(appID) else {
             endSession()
             return
@@ -254,9 +310,50 @@ final class LiveTracker {
         if let closed = engine.record(press, in: context) { save(closed) }
     }
 
+    /// A key posted by another process. A paste from an app that just recorded counts the words on
+    /// the clipboard at that moment; posted characters are collected until they stop. The text is
+    /// never kept. Times are when Keypace sees the event, the clock microphone changes use.
+    private func noteDictationText(_ key: ObservedKey, appID: String) {
+        guard key.sourceProcessID > 0, filter.tracks(appID) else { return }
+        let source = clock.appOwner(Int32(truncatingIfNeeded: key.sourceProcessID))
+        let time = clock.uptime()
+        if key.command, key.keyCode == Self.pasteKeyCode || key.text.lowercased() == "v" {
+            guard dictations.expectsText(from: source, at: time) else { return }
+            let words = WordCount.count(clock.clipboard() ?? "")
+            if let found = dictations.pasted(words: words, by: source, at: time) { save(found, appID: appID) }
+        } else if !key.commandOrControl, !key.isRepeat, !key.text.isEmpty {
+            dictations.typed(key.text, by: source, at: time)
+            dictationTargets[source] = appID
+        }
+    }
+
+    /// A process started or stopped recording.
+    func microphoneChanged(_ change: MicrophoneMonitor.Change) {
+        let source = clock.appOwner(change.processID)
+        if change.isRecording {
+            dictations.microphoneStarted(processID: Int64(change.processID), sourceID: source, at: clock.uptime())
+        } else {
+            dictations.microphoneStopped(processID: Int64(change.processID), at: clock.uptime())
+        }
+    }
+
+    private func save(_ found: DictationDetector.Detected, appID: String) {
+        let now = clock.now()
+        let uptime = clock.uptime()
+        let record = DictationRecord(
+            start: now.addingTimeInterval(found.start - uptime), end: now.addingTimeInterval(found.end - uptime),
+            appID: appID, sourceID: found.sourceID, words: found.words, speakingSeconds: found.speakingSeconds
+        )
+        attempt { try store?.save(record) }
+        revision += 1
+    }
+
     /// Closes an idle session, publishes the open session and live speed, and writes pending counts.
     /// Runs every second while capturing.
     func tick() {
+        for found in dictations.flush(at: clock.uptime()) {
+            save(found, appID: dictationTargets.removeValue(forKey: found.sourceID) ?? "unknown")
+        }
         if let closed = engine.closeIfIdle(at: clock.uptime()) { save(closed) }
         current = engine.current
         // Rounded, so an unchanged number doesn't redraw the menu bar.
@@ -302,10 +399,20 @@ final class LiveTracker {
 
     // MARK: Capture
 
+    /// Watches the microphone while capturing and measuring voice.
+    private func updateMicrophones() {
+        if capture, status == .running, measure.voice {
+            microphones.start { [weak self] in self?.microphoneChanged($0) }
+        } else {
+            microphones.stop()
+        }
+    }
+
     private func startCapture() {
         if startMonitor() {
             status = .running
             devices?.start()
+            updateMicrophones()
         } else {
             status = .needsPermission
         }
@@ -321,12 +428,14 @@ final class LiveTracker {
             monitor.stop()
             captureStopped()
             status = .needsPermission
+            updateMicrophones()
         case .running:
             tick()
         case .needsPermission:
             if startMonitor() {
                 status = .running
                 devices?.start()
+                updateMicrophones()
             }
         }
     }
